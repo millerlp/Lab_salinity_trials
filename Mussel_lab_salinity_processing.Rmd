@@ -7,6 +7,21 @@ editor_options:
     wrap: 72
 ---
 
+
+# TODOs
+
+* Write code to import all gape files from a particular mussel (SN###) and
+  concatenate them into a single file
+
+* Process those concatenated data to convert raw gape values into estimates of
+gape opening %
+
+* Write code to import and concatenate heart data files for each mussel
+
+* Write code to process raw heart data into beats per minute estimates, with
+manual quality assurance as needed
+
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
