@@ -21,6 +21,8 @@ gape opening %
 * Write code to process raw heart data into beats per minute estimates, with
 manual quality assurance as needed
 
+* Other stuff
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
