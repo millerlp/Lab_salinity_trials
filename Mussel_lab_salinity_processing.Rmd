@@ -1,0 +1,916 @@
+---
+title: "LPL lab mussel salinity trials"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#libraries
+```{r loadLibraries, echo=FALSE, message=FALSE}
+library(tidyverse)
+#library(scales)
+#library(readr) 
+#library(dplyr)
+#library(Tides)
+#library(janitor)
+#library(zoo)
+#library(esquisse)
+#library(timetk)
+#library(ggpattern)
+```
+
+
+# import files
+
+```{r fileLocations, echo=FALSE}
+# Path from the R code directory to the data directory
+localpath = '../../data/Lab_mussel_salinity_trials/LPL_Mytilus_lab_salinity_trials_Summer2023/'  # Luke's path from the R cod dir to the data dir
+
+# Path to the folder with the raw data subfolders
+trialpath = 'Raw_data_files_Summer2023/'
+
+# Path to the metadata file
+metafilename = 'Mussel_metadata_calibs_Summer2023.xlsx'
+
+```
+
+
+```{r gapeFunctions,echo=FALSE}
+#TODO: the DistFromCounts, percentileRange, and calcPercentGapeNLME 
+# functions all need to be updated to make use of the more linear
+# calibration data for these mussels
+
+# A set of functions originally taken from MusselTracker_data_proc4.R to 
+# handle the gape data
+
+################################################################################
+### gapBounds function
+# A function to determine where there are gaps of missing data, so that we can 
+# apply a filter to the good chunks of data. Most filters fail if there are NAs
+# present, and our remaining gaps in the data are big enough that they probably
+# shouldn't be smoothed-over anyhow. 
+#' A function to find the start and end indices of numeric data in a vector. 
+#' Useful for dealing with timeseries that have gaps, and operations that need
+#' to operate the separate chunks of contiguous numeric values
+#' @param value A vector of numeric values, with NAs 
+#' @return A data frame with 2 columns, Start and End, which contain the row
+#' indices for the first good and last good values in each contiguous run of
+#' numeric values. 	
+gapBounds <- function (values){
+	# This function returns a data frame of 2 columns, start + end, that give
+	# the row indices of the start and end of each run of good data in the 
+	# input vector. It should handle data streams that start with NAs and
+	# should handle streams that end with NAs. 
+	
+	# Use run length encoding function to find NA gaps
+	gaps = rle(is.na(values))
+	# If the first entry in gaps is TRUE, this indicates that the data started
+	# with NA values.
+	if (gaps$values[1] == TRUE) {
+		startNA = TRUE	# Data started with NAs
+	} else {	
+		startNA = FALSE	 # Data started with real values
+	}
+	# If the last entry in gaps is TRUE, the data end on NAs
+	if (gaps$values[length(gaps$values)] == TRUE){
+		endNA = TRUE	# Data ends with NAs
+	} else {
+		endNA = FALSE	# Data ends with real values
+	}
+	
+	# The number of gaps with value == TRUE is the number of good runs of data
+	# and gaps with value == FALSE are the starts of runs of NAs. This will
+	# get the number of FALSE (negated to TRUE) values in gaps. A dataset
+	# ending in good data will have a last entry in gaps of FALSE. 
+	numgaps = sum(!gaps$values) 
+	
+	# Create the output data frame
+	results = data.frame(Start = integer(numgaps), End = integer(numgaps))
+	
+	if (!startNA) {
+		# If startNA == FALSE (started on good data, the first entry should 
+		# always be 1 (1st row) 
+		# If there are no gaps, the
+		# contents of gaps$lengths will just be the length of the values vector
+		results$Start[1] = 1
+		results$End[1] = gaps$lengths[1]
+	} else if (startNA){
+		# However, if the dataset starts with NAs, the first entry in gaps will
+		# be the index of the first good data, while the 2nd entry will be the 
+		# start of the next stretch of NAs
+		results$Start[1] = gaps$lengths[1]+1
+		results$End[1] = sum(gaps$lengths[1:2])
+	}
+	
+	# If there is more than 1 entry in gaps$lengths, process the other gaps
+	j = 2; # counter
+	if (numgaps > 1){
+		if (!startNA & endNA){
+			# If the dataset ends on NAs (TRUE last), truncate gapind by 1
+			gapind = seq(2,length(gaps$lengths)-1, by = 2)
+		} else if (!startNA & !endNA) {
+			# If the dataset ends on good values (FALSE last)
+			gapind = seq(2,length(gaps$lengths), by = 2)
+		} else if (startNA & endNA) {
+			# If dataset starts on NAs (TRUE 1st) and ends on NAs (TRUE last)
+			gapind = seq(3, length(gaps$lengths)-1, by = 2)
+		} else if (startNA & !endNA) {
+			# If dataset starts on NAs (TRUE 1st) and ends on good data 
+			# (FALSE last)
+			gapind = seq(3, length(gaps$lengths), by = 2)
+		}	
+		# Step through the rest of the gaps object to find the start and end
+		# points of each stretch of good data. 
+		for (i in gapind){
+			nextstart = sum(gaps$lengths[1:i]) + 1
+			nextend = sum(gaps$lengths[1:(i+1)])
+			results$Start[j] = nextstart
+			results$End[j] = nextend
+			j = j + 1
+		}
+	} # end of if (numgaps > 1)
+	results	# return the results dataframe, 2 columns Start and End
+}
+
+################################################################################
+### gapBounds2 function
+#' Function that sets bounds for upper and lower limit of hall counts to 
+#' calculate gape opening % while dealing with growth rates. Change chunk 
+#' length to certain number of days (hall count rows) (arbitrary 5 days). Use 
+#' gapbounds function to set new ranges. 
+#' @param mygaps A data frame from gapbounds function
+#' @param maxrow Max length of rows (time) to subset out 
+
+gapBounds2=function(mygaps, maxrow){
+	mydiff=mygaps$End[1]-mygaps$Start[1]
+	if (mydiff>maxrow){
+		quotient=mydiff/maxrow #quotient=number of subsets (chunks) to make based on max row
+		nloops = floor(quotient)
+		
+		for (i in 1:nloops){
+			if (i == 1 & nloops>=2){
+				mygaps2 = data.frame(Start = mygaps$Start[1], End = mygaps$Start[1]+maxrow)
+			} else if (i==1 & nloops<2){
+				mygaps2 = data.frame(Start = mygaps$Start[1], End = mygaps$End[1])
+			} else if (i > 1 & i < nloops){
+				temp = data.frame(Start = mygaps2$End[i-1]+1, End = mygaps2$End[i-1]+maxrow )
+				mygaps2 = rbind(mygaps2, temp)
+			} else if (i > 1 & i == nloops){
+				temp = data.frame(Start = mygaps2$End[i-1]+1, End = mygaps$End[1])
+				mygaps2 = rbind(mygaps2, temp)
+			}
+		}
+	} else if (mydiff <= maxrow){
+		# Handle the case where the 1st entry in mygaps is shorter than maxrow, just copy the values
+		# over to a dataframe we're calling mygaps2
+		mygaps2 = data.frame(Start = mygaps$Start[1], End = mygaps$End[1])
+	}
+	# Handle cases where there is more than a single row in mygaps
+	if (nrow(mygaps) > 1) {
+		for (j in 2:nrow(mygaps)){
+			mydiff=mygaps$End[j]-mygaps$Start[j]
+			if (mydiff>maxrow){
+				quotient=mydiff/maxrow #quotient=number of subsets (chunks) to make based on max row
+				nloops = floor(quotient)
+				
+				for (i in 1:nloops){
+					if (i == 1){
+						temp = data.frame(Start = mygaps$Start[j], End = mygaps$Start[j]+maxrow)
+						mygaps2 = rbind(mygaps2, temp)
+					} else if (i > 1 & i < nloops){
+						temp = data.frame(Start = mygaps2$End[nrow(mygaps2)]+1, End = mygaps2$End[nrow(mygaps2)]+maxrow)
+						mygaps2 = rbind(mygaps2, temp)
+					} else if (i == nloops){
+						temp = data.frame(Start = mygaps2$End[nrow(mygaps2)]+1, End = mygaps$End[j])
+						mygaps2 = rbind(mygaps2, temp)
+					}
+				}
+			} else {
+				# handle the case where the next entry in mygaps is shorter than maxrow, just copy the start/end from 
+				# mygaps into mygaps2
+				mygaps2 = rbind(mygaps2, mygaps[j,])
+			}
+		}
+	}
+	mygaps2 # return this data frame at the end of the function
+	
+}
+
+
+
+#{r hallFilter_function}
+################################################################################
+# This filter function probably isn't necessary for the lab salinity trials 
+# since they are collected at much lower frequency (1 minute) compared to the
+# original 1-second sampling regime used back in 2015
+
+### hallFilter function
+#' A function to apply a Butterworth 1st order low-pass filter to a vector
+#'  of data. If there are NA values in the original data, they will be 
+#'  preserved in the output vector. The filter is set to filter at 1/10 the
+#' original sampling rate (which is 5 sec interval (0.2Hz), producing an approximate
+#' 50-second window of smoothing. Raw input data are initially centered on 0
+#' to avoid artifacts at the start of the filter, and the output is re-centered
+#' at the original starting value after the filtering is applied. 
+#' 
+#' @param hallData A vector of hall effect data.
+#' @return A vector of filtered hall effect sensor data.
+#'  
+hallFilter = function(hallData){	
+	# Define a butterworth low-pass filter, 1st order, to filter at 1/10 the 
+	# sampling rate (which was 5 secs (0.2Hz))
+	# myfilter = signal:::butter(1,0.1,type='low', plane = 'z')
+	# Find the start and end of any gaps in the data set using the gapBounds
+	# function defined earlier
+	mygaps = gapBounds(hallData)
+	# Apply the filter to the good runs of data
+	for (i in 1:nrow(mygaps)){
+		# Extract the run of good data
+		dats = hallData[mygaps$Start[i]:mygaps$End[i]]
+		# Find the offset of the data from zero
+		offset = dats[1]
+		# Subtract the offset off of all of the data in this run
+		# (The butterworth filter returns large transient values at the start
+		# of the run if the value is much different from zero)
+		dats = dats - offset
+		# Call the filter routine to apply the filter
+		yfiltered = signal:::filter(myfilter,dats)
+		# Add the offset back on so the data are back on their original scale
+		yfiltered = yfiltered + offset
+		# Write the filtered data back into the data vector
+		hallData[mygaps$Start[i]:mygaps$End[i]] = yfiltered
+	}
+	# Round the filtered data back to the nearest whole number, since these
+	# represent ADC count data.
+	hallData = round(hallData)
+	hallData	# return vector of filtered data
+}
+
+
+
+####{r DistFromCounts_function}
+################################################################################
+# LPM: This nonlinear approximation is not likely to be necessary for the
+# calibrated Mytilus used in this experiment, since their opening range is 
+# small enough that a simple linear fit is a sufficient approximation of 
+# gape opening distance. 
+
+### DistFromCounts function
+# Define a non-linear function that allows you to plug in a Hall effect sensor
+# count value and generate an approximate distance in mm. Supply the 
+# coefficients a, b, c, based on a nls curve fit for counts as a function of
+# distance. 
+# In the above equation, 'a' is the effective asymptotic value
+# 'b' is the range of values between the minimum observed count and the 
+# asymptotic count (so a min count of 400 and asymptote of 500 gives b = 100)
+# 'c' is effectively a curvature parameter. Larger values of 'c' yield a 
+# smaller change in Distance as Counts increases (when back-calculating 
+# Distance), particularly for low Counts values. 
+#' A function to back-calculate an asymptotic function to generate a distance
+#' value based on a hall effect sensor count value input.
+#' 
+#' @param Counts A vector of hall effect sensor values, usually between 0 and 
+#' 512 (from a 10-bit analog-to-digital converter). 
+#' @param a A parameter derived from an asymptotic curve fit, representing the
+#' asymptotic count value
+#' @param b A parameter derived from an asymptotic curve fit, representing the 
+#' range from the minimum count up to the asymptotic value. 
+#' @param c A parameter derived from an asymptotic curve fit, representing the
+#' curvature of the fit. 
+#' @returns A vector of distance values of the same length as Counts. Any input 
+#' values equal or larger than the asymptotic parameter a will return Inf.
+
+DistFromCounts <- function(Counts, a,b,c){
+	dist = (log((Counts - a)/(-1*b))) / (-1*c)
+	dist
+}
+
+
+###{r percentileRange_function}
+################################################################################
+### percentileRange function
+# Define a function to calculate the average reading for the upper and lower
+# x percentile of the hall effect data. This is designed to remove potential 
+# outliers that may be due to disturbances such as another magnet getting near
+# the sensor temporarily
+
+#' Calculate the average of the specified lower percentile and upper percentile
+#' and return the values that correspond to those means (rounded to integers).
+#' 
+#' @param hallData A vector of analog-to-digital convertor counts from a 
+#' Hall effect sensor. The values are assumed to start low (<512) when the 
+#' magnetic signal is strong (close to sensor) and increase towards 512 when
+#' the magnetic signal is weak (far from sensor).
+#' @param percentileLim A set of 2 numeric values between 0 and 1, usually close
+#'  to 0.01 and 0.99
+#' used to define the lower and upper percentile limits. A value of 
+#' 0.01 would cause the 1st percentile sensor values to be used as the
+#' lower limits, and similar for the upper limit. 
+#' @return A two element vector for the lower and upper values in hallData that
+#' represent the lower and upper percentiles
+
+percentileRange <- function (Hallvec, percentileLim = c(0.01,0.99)){
+	# Remove any NA's
+	temp = Hallvec[!is.na(Hallvec)]
+	# Reorder the values smallest to largest
+	temp = temp[order(temp)]
+	# Get the index of the entry closest to percentileLim
+	indx = round(percentileLim[1] * length(temp)) 
+	# Calculate the mean value for the lower % of closed valve values and
+	# round up to the next integer value
+	closedVal = ceiling(mean(temp[1:indx]))
+	
+	# Now do the same for the other end of the range of hall effect values
+	# These would normally represent "fully open" readings near 512 if the 
+	# magnet and sensor are situated so that the magnet drives the signal
+	# below 512 when it approaches the sensor as the shell valves close. 
+	indx = round(percentileLim[2] * length(temp))
+	# Calculate the mean value for the upper % of open valve values and round
+	# down to the next integer value
+	openVal = floor(mean(temp[indx:length(temp)]))
+	result = c(closedVal, openVal)
+	result # return the two values, always smallest then largest
+}
+
+
+####{r calcPercentGapeNLME_function}
+################################################################################
+### calcPercentGapeNLME function
+# Use this function to calculate the percentage gape (0-100%)
+# This calculates the baseline fully-closed and fully-open values based on the upper and lower 1% of hall effect sensor data for the given range of rows in the input dataset. Supply a vector of Hall effect sensor data. This function will find any gaps in the vector (NA's) and calculate a new baseline for each section of good data. 
+#' Convert hall effect count data (integer values from analog-digital converter) into percent gape values between 0 and 100\%. ' 
+#' @param hallData A vector of analog-to-digital convertor counts from a  Hall effect sensor. The values are assumed to start low (<512) when the magnetic signal is strong (close to sensor) and increase towards 512 when the magnetic signal is weak (far from sensor).
+#' @param cRegress A linear model object (lm) for the relationship of 'c' versus the log-transform of 'b'. 
+#' @param percentileLim A numeric value between 0 and 1, usually close to 0.01, used to define the lower and upper percentile limits (the upper limit is mirrored from the lower limit). A value of 0.01 would cause the 1st and 99th percentile sensor values to be used as the lower and upper limits.
+#' @return A vector of the same length as hallData containing percentage values 0 to 100, representing the shell valve gape opening. A value of 0 is a fully closed shell (strong magnetic signal) and 100 is a fully open shell (weak magnetic signal).
+
+calcPercentGapeNLME <- function (hallData, cRegress, percentileLim = 0.01){
+	require(nlme)
+	# Get the row indices for the major gaps that exist now
+	mygaps = gapBounds(hallData)
+	# Create an empty output vector of the same length as the input data. 
+	outputData = vector(mode = 'numeric', length = length(hallData))
+	outputData[] = NA # Convert all the values to NA to begin with
+	
+	# Now for each section of the input data, calculate the percent gape. This involves using the entries in mygaps to subset the input data and calculate individual percentile values for each contiguous section of data. If there is a significant gap in the data (usually > 30 sec), the percentages will be re-calculated for each contiguous section of data. This should accommodate any sensor/magnet re-glueing issues. 
+	for (i in 1:nrow(mygaps)){
+		st = mygaps$Start[i]
+		end = mygaps$End[i]
+		# First calculate the upper and lower 1% values of the Hall readings. These will be count values representing the fully closed (lowest) and fully open (highest, closest to 512) values.
+		myrange = percentileRange(hallData[st:end], 
+				percentileLim = percentileLim)
+		
+		# Now truncate count values that are outside myrange to the limits of myrange.
+		rowIndices = which(hallData[st:end] < myrange[1])
+		hallData[(st+rowIndices)] = myrange[1]
+		rowIndices = which(hallData[st:end] > myrange[2])
+		hallData[(st+rowIndices)] = myrange[2]
+		
+		# The count values are now constrained within a range that should encompass fully closed (0mm) to fully open (~5mm gape). Now calculate the approximate gape opening based on the count values and a curve fit. 
+		
+		# Define the three asymptotic curve parameters a,b,c using the data for the current chunk of data.
+		aVal = max(hallData[st:end],na.rm=TRUE)+1 # add 1 count to avoid Inf output.
+		bVal = max(hallData[st:end],na.rm=TRUE) - 
+				min(hallData[st:end],na.rm=TRUE)
+		# Calculating c requires the linear model object supplied as cRegress, which will use the log-transformed 'b' value to estimate the 'c' parameter
+		cVal = predict(cRegress, newdata = list(b = bVal))
+		
+		# Use DistFromCounts function to estimate valve gape distance using the input hall effect count data at each time point and the parameters a,b,c
+		temp2 = DistFromCounts( hallData[st:end], 
+				a = aVal,
+				b = bVal,
+				c = cVal)
+		
+		# Replace any fully-open Inf values with the largest good max distance
+		temp2[is.infinite(temp2)] = max(temp2[is.finite(temp2)])
+		# Replace any negative distance values with the 0 distance value
+		temp2[which(temp2 < 0)] = 0
+		# Convert to percentage by dividing all distances by the maximum value
+		outputData[st:end] = (temp2 / max(temp2,na.rm=TRUE)) * 100
+		
+		# Round the values off to a reasonable precision
+		outputData[st:end] = round(outputData[st:end],1)
+		
+	}	
+	outputData	# return the output data vector
+}	# end of calcPercentGapeNLME function
+
+
+
+
+####{r calcPercentGapeNLMEsubset_function}
+################################################################################
+### calcPercentGapeNLMEsubset function
+# Use this function to calculate the percentage gape (0-100%) of only a subset of data (days) at a time to account for growth of oyster shell. 
+# This calculates the baseline fully-closed and fully-open values based on the upper and lower 1% of hall effect sensor data for the given range of rows in the input dataset. Supply a vector of Hall effect sensor data. This function will find any gaps in the vector (NA's) and calculate a new baseline for each section of good data. 
+#' Convert hall effect count data (integer values from analog-digital converter) into percent gape values between 0 and 100\%. ' 
+#' @param hallData A vector of analog-to-digital converter counts from a  Hall effect sensor. The values are assumed to start low (<512) when the magnetic signal is strong (close to sensor) and increase towards 512 when the magnetic signal is weak (far from sensor).
+#' @param cRegress A linear model object (lm) for the relationship of 'c' versus the log-transform of 'b'. 
+#' @param percentileLim A numeric value between 0 and 1, usually close to 0.01, used to define the lower and upper percentile limits (the upper limit is mirrored from the lower limit). A value of 0.01 would cause the 1st and 99th percentile sensor values to be used as the lower and upper limits.
+#' @param myPercentThreshold A value from 0 to 1 used during the final conversion from distance to 
+#' percentage gape to filter all very wide values to just be 100%. You can put a value such as 0.9
+#' and this will take any estimated distance value greater than the 90th percentile for the current
+#' chunk of hall data and convert all of those large values to 100%. All of the smaller distance values
+#' will also be scaled relative to this 90th percentile distance, meaning that smaller distances will 
+#' appear as greater percentage opening values than they would if myPercentThreshold were set to the 
+#' default 1.0. 
+#' @return A vector of the same length as hallData containing percentage values 0 to 100, representing the shell valve gape opening. A value of 0 is a fully closed shell (strong magnetic signal) and 100 is a fully open shell (weak magnetic signal).
+#' @param maxrow A number of rows used to define the upper and lower limits of hall sensor calculations. Chose arbitrary 7 day chunk. may want to be 5 days bc if have little bit of leftover chunk then can  add on to previous so then last chunk is 7 days. 
+#' @param minrows The minimum number of rows of contiguous hall data that we will allow to be converted
+#' to a percentage gape. Because very short chunks of hall data will probably not encompass the full 
+#' range of opening and closing, we wouldn't want to try to calculate 0-100% open values. minrows will be
+#' specified as a number of rows, so the conversion to length of time depends on how frequently the 
+#' hall data were being sampled. Lauren's BivalveBit sensors were collecting once a minute. 1440 minutes
+#' in a day
+
+calcPercentGapeNLMEsubset <- function (hallData, cRegress, percentileLim = c(0.01,0.99), maxrow, minrows = 1440, myPercentThreshold = 1.0){
+	require(nlme)
+	if (exists('aValOld')) {rm(aValOld)}
+	if (exists('oldthresholdvalue')) {rm(oldthresholdvalue)}
+	# Get the row indices for the major gaps that exist now
+	mygaps = gapBounds(hallData) #identify start and end of non-NA chunks of data.
+	
+	# Check if any of the Start/End values in mygaps are less than minrows apart. If they are, remove
+	# that entry from mygaps
+	mydiffs = mygaps$End - mygaps$Start
+	# remove chunks that are too small 
+	mygaps = mygaps[which(mydiffs > minrows),] 
+	
+	if (nrow(mygaps > 0)){
+		# Use gapBounds2 to subdivide the continuous data into chunks of time that are defined by maxrow
+		mygaps = gapBounds2(mygaps, maxrow)
+		
+		# Create an empty output vector of the same length as the input data. 
+		outputData = vector(mode = 'numeric', length = length(hallData))
+		outputData[] = NA # Convert all the values to NA to begin with
+		
+		# Now for each section of the input data, calculate the percent gape. This involves using the entries in mygaps to subset the input data and calculate individual percentile values for each contiguous section of data. If there is a significant gap in the data (usually > 30 sec), the percentages will be re-calculated for each contiguous section of data. This should accommodate any sensor/magnet re-glueing issues. 
+		for (i in 1:nrow(mygaps)){
+			st = mygaps$Start[i]
+			end = mygaps$End[i]
+			# First calculate the upper and lower 1% values of the Hall readings. These will be count values representing the fully closed (lowest) and fully open (highest, closest to 512) values.
+			myrange = percentileRange(hallData[st:end], 
+					percentileLim = percentileLim)
+			
+			# Now truncate count values that are outside myrange to the limits of myrange.
+			rowIndices = which(hallData[st:end] < myrange[1])
+			hallData[((st-1)+rowIndices)] = myrange[1]
+			rowIndices = which(hallData[st:end] > myrange[2])
+			hallData[((st-1)+rowIndices)] = myrange[2]
+			
+			# The count values are now constrained within a range that should encompass fully closed 
+			# (0mm) to fully open (~5mm gape). Now calculate the approximate gape opening based on the count values and a curve fit. 
+			# Define the three asymptotic curve parameters a,b,c using the data for the current chunk of data.
+			# Compare to previous chunk's aVal, if current chunk is less then use previous chunk's aVal
+			if(exists('aValOld')){
+				aVal = max(hallData[st:end],na.rm=TRUE)+1 # add 1 count to avoid Inf output
+				if (aValOld > aVal){
+					aVal = aValOld  # if the current aVal is lower than the previous aValOld, keep using the aValOld
+				} else if (aValOld <= aVal){
+					aValOld = aVal # Update aValOld to use this new larger aVal from the current chunk of data
+				}
+			} else {
+				# If aValOld doesn't exist yet, find the aVal value and also set aValOld to equal aVal'
+				# aVal=value at maximum opening
+				aVal = max(hallData[st:end],na.rm=TRUE)+1 # add 1 count to avoid Inf output
+				aValOld = aVal  # store the max value for the next time through this loop
+			}
+			# bVal=the difference between the highest value (aVal) and the lowest (closed)
+			# value in this chunk
+			bVal = aVal - 
+					min(hallData[st:end],na.rm=TRUE)
+			# Calculating c requires the linear model object supplied as cRegress, 
+			# which will use the log-transformed 'b' value to estimate the 'c' parameter
+			cVal = predict(cRegress, newdata = list(b = bVal))
+			
+			# Use DistFromCounts function to estimate valve gape distance using the input hall
+			# effect count data at each time point and the parameters a,b,c
+			temp2 = DistFromCounts(hallData[st:end], 
+					a = aVal,
+					b = bVal,
+					c = cVal)
+			
+			# Replace any fully-open Inf values with the largest good max distance
+			temp2[is.infinite(temp2)] = max(temp2[is.finite(temp2)])
+			# Replace any negative distance values with the 0 distance value
+			temp2[which(temp2 < 0)] = 0
+			# Convert to percentage by dividing all distances by the maximum value
+			# outputData[st:end] = (temp2 / max(temp2,na.rm=TRUE)) * 100  # original version 0-100%
+			
+			orderedtemp2 = temp2[order(temp2)] # order all the distance values from small to large
+			
+			thresholdindex =  floor(length(temp2) * myPercentThreshold) # find row index of the percentile
+			thresholdvalue  = orderedtemp2[thresholdindex] # grab the value that is the percentile limit
+			
+			if (!exists('oldthresholdvalue')) {
+				oldthresholdvalue = thresholdvalue
+			} else if (exists('oldthresholdvalue')) {
+				if (oldthresholdvalue > thresholdvalue) {
+					# The previous chunk's X-percentile value was larger than this chunk's, so use the old x-percentile value
+					thresholdvalue = oldthresholdvalue
+				} else if (thresholdvalue >= oldthresholdvalue){
+					# If this new chunk's x-percentile value is larger than the previous chunk's, update old x-percentile value
+					oldthresholdvalue = thresholdvalue
+				}
+			}
+			temp3 = (temp2 / thresholdvalue ) * 100 # divide all values by the percentile threshold value
+			temp3[which(temp3 > 100)] = 100 # filter any percentages > 100 to just be 100
+			outputData[st:end] = temp3
+			
+			
+			# Round the values off to a reasonable precision
+			outputData[st:end] = round(outputData[st:end],1)
+			
+		}
+	}	else if (nrow(mygaps) == 0){
+		# None of the chunks was long enough to use, so we have no percentage data to return
+		outputData = vector(mode = 'numeric', length = 0L)
+	}
+	
+	outputData	# return the output data vector
+}	# end of calcPercentGapeNLME function
+
+
+
+###{r cRegress_function}
+#cRegressEstimate helps calibrate sensors using CalibFileName.csv file 
+################################################################################
+################################################################################
+# Function cRegressEstimate
+# Currently this represents the best data showing how the relationship between
+# magnet signal and distance is repeatable and consistent among different
+# magnets (all from the same batch/part number). As such, a non-linear curve
+# can be fit to the various calibration runs to generate a set of 
+# coefficients a,b,c for an asymptotic curve. Then the values from a field 
+# mussel can be analyzed to determine the asymptotic maximum count value
+# (widest opening) and minimum count value (fully closed), which give us the
+# parameters for coefficients a and b in the curve fit. Because the curvature
+# coefficient 'c' of the curves is very linear with respect to the coefficient
+# 'b' (range of readings), we can plug in the max vs. min range for a particular
+# mussel and use that to predict the appropriate curve coefficient 'c' to use
+# for that mussel. 
+
+#' A function to generate a set of hall effect calibration data and estimate
+#' the relationship between parameters 'b' and 'c', for later use in the 
+#' function calcPercentGapeNLME(). 
+#' @param SN A text string naming the board serial number, in the form 'SN21'
+#' @param Channel numeric value naming the Hall effect sensor channel to be 
+#' calibrated (expected values 0-15). 
+#' @param gapeCalibFile A text path to the file that holds Hall effect
+#' calibration data
+#' @return cRegress A linear model object representing the best fit regression
+#'  of parameter 'c' on the log-transformed parameter 'b'. 
+
+cRegressEstimate <- function(SN, Channel, gapeCalibFile){
+	require(nlme)
+	# Create an identifier for the board/channel combination 'SN21Ch01'
+	if (Channel < 10){
+		newChannel = paste0('0',as.character(Channel))
+	} else {
+		newChannel = as.character(Channel)
+	}
+	currentID = paste0(SN,'Ch',newChannel)
+	
+	# Get list of calibration data
+	gapeCalibs = read.csv(gapeCalibFile)
+	
+	gapeCalibs$Serial = factor(gapeCalibs$Serial)
+	gapeCalibs$Trial = factor(gapeCalibs$Trial)
+	# Create a unique identifier for each board/channel combination,
+	# ensuring that the Channel number is always 2 digits
+	gapeCalibs$ID = factor(paste0(gapeCalibs$Serial,'Ch',
+					ifelse(gapeCalibs$HallChannel<10,
+							paste0('0',gapeCalibs$HallChannel),
+							gapeCalibs$HallChannel)))
+	
+# For any instance where magnet was set up so that values climbed above 512
+# when close to the sensor, reverse those values so they are all less than 
+# 512. 
+	for (i in 1:length(levels(gapeCalibs$ID))){
+		if (max(gapeCalibs$Reading[gapeCalibs$ID == 
+								levels(gapeCalibs$ID)[i]]) > 515){
+			gapeCalibs$Reading[gapeCalibs$ID == 
+							levels(gapeCalibs$ID)[i]] = 1023 - 
+					gapeCalibs$Reading[gapeCalibs$ID == 
+									levels(gapeCalibs$ID)[i]]
+		}
+	}	
+	# Begin generating the asymptotic curve fit parameters for the magnetic
+# hall effect sensor data. 
+	gC2 = groupedData(Reading~Distance.mm|ID/Trial,data=gapeCalibs)
+	
+	
+# Fit the asymptotic model and generate a set of coefficient values
+# This will adjust each set of a,b,c coefs based on a random effect of
+# magID and Trial. 
+	
+	# Fit separate curves to each group (trial) in the grouped data frame
+	mod3 = nlsList(Reading~a-(b*exp(-c*Distance.mm)), 
+			data = subset(gC2,subset = ID == currentID), 
+			start = c(a = 460, b = 60, c = 0.3),
+			control = list(minFactor = 1e-9, msMaxIter = 200, maxiter = 200))
+# Extract the a,b,c coefficients and put them in a data frame
+	abcvals = data.frame(a = coef(mod3)[,1], b = coef(mod3)[,2],
+			c = coef(mod3)[,3])
+	
+# The fit between 'b' and 'c' can be linearized with a log transform of 'b'
+	cRegress = lm(c~log(b), data = abcvals)  
+	
+#	plot(c~`log(b)`, data = cRegress$model) # Plot the original data
+#	abline(cRegress) # fitted regression line
+	
+	# Return cRegress as the output
+	cRegress
+}  # end of cRegressEstimate function.
+################################################################################
+
+
+```
+
+
+```{r loadFileFunctions, echo=showcode}
+# TODO: Adapt these functions to work with the lab mussel metadata files
+
+########################################
+# loadFieldMetaData function
+#' Load a csv data file containing deployment metadata and maintenance data
+#' 
+#' The deployment metadata file should contain entries for each oyster and 
+#' its associated hall effect sensor channel for a given period of time denoted 
+#' by the timestamps in 2 columns titled StartIncludeUTC and EndIncludeUTC, which
+#' are assumed to have Excel-formatted date and time stamps in the UTC time zone
+#' marking the start and end of each known-good deployment period (thus ignoring
+#' time periods when the sensors were pulled from the mooring for maintenance or
+#' other interruptions). 
+#' 
+#' @param filename The path and filename of the metadata csv file
+#' @param timezone The timezone of the timestamp data in the metadata file. 
+#' Default = UTC.
+#' @return A data frame containing the same original columns as the metadata 
+#' file, but with timestamps formatted as POSIXct values in the appropriate
+#' time zone. 
+
+loadFieldMetaData <- function(filename, timezone = 'UTC'){
+	metadata = read.csv(file= filename)
+	metadata$StartIncludeUTC = as.POSIXct(metadata$StartIncludeUTC,
+			format = '%m/%d/%Y %H:%M',tz = 'UTC')
+	metadata$EndIncludeUTC = as.POSIXct(metadata$EndIncludeUTC,
+			format = '%m/%d/%Y %H:%M',tz = 'UTC')
+	metadata$timeofdeath = as.POSIXct(metadata$timeofdeath,
+			format = '%m/%d/%Y %H:%M',tz = 'UTC')
+	metadata # return data frame
+}
+
+loadFieldMaintData <- function(filename,timezone = 'UTC'){
+	maintdata = read.csv(file=filename)
+	maintdata$StartMaintUTC = as.POSIXct(maintdata$StartMaintUTC,
+			format = '%m/%d/%Y %H:%M',tz = 'UTC')
+	maintdata$EndMaintUTC = as.POSIXct(maintdata$EndMaintUTC,
+			format = '%m/%d/%Y %H:%M',tz = 'UTC')
+	maintdata # return data frame
+}
+
+################################################################
+# ConcatGapeFiles
+# This function deals with the GAPE data files that have an 
+# unnecessary comma at the end of each row of data, which messes with the 
+# read.csv import function
+
+#' Concatenate multiple daily gape files into one data frame
+#' 
+#' @param filenames A vector of filenames (including path) to be concatenated
+#' @param myTimeZone A text representation of the timezone that the datalogger clock was set to (i.e. 'UTC' or 'PST8PDT' or 'etc/GMT+8')
+#' @param verbose Turn on the progress bar if set to TRUE
+#' @return A data frame consisting of the input files concatenated and sorted chronologically. 
+
+# ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC',verbose=TRUE){
+ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC', code = '', startDate = NULL, endDate = NULL, verbose=TRUE){
+	if (exists('dat')) { rm(dat)} # clear dat from memory
+	if(verbose){
+		pb = txtProgressBar(min=0,max = length(filenames), style = 3)
+	}
+# Open the raw data files and concatenate them.
+	for (f in 1:length(filenames)){
+		if(verbose) setTxtProgressBar(pb,f)
+		con = file(filenames[f])
+		line1 = scan(con, what='character', nlines = 1, sep = ',', quiet = TRUE)
+		line2 = scan(con, what = 'character', skip = 1, nlines = 1, sep = ',', quiet = TRUE)
+		close(con)
+		if (length(line2) > length(line1)){
+			# There is an extra column in the data section due to a trailing comma in the data rows so we need to handle the column names correctly on import
+			dattemp = read.csv(filenames[f], skip = 1, header = FALSE,
+					col.names = c(line1,'Extra'))
+			# Remove the extra column at the end
+			dattemp = dattemp[,-(ncol(dattemp))]
+		} else {
+			# number of headers is same as number of data columns, so just import as normal
+			dattemp = read.csv(filenames[f])
+		}
+		
+		
+		###########################
+		# Columns:
+		# POSIXt: elapsed seconds since 1970-01-01 00:00:00 (unix epoch) in whatever
+		#         timezone the sensor was set to during deployment. Presumably UTC
+		# DateTime: human-readable character date and time, in whatever timezone the
+		#         sensor was set to during deployment 
+		# SN: serial number of the sensor
+		# Hall: raw Hall effect gape sensor reading
+		# TempC: temperature in Celsius from TMP107 sensor on the heart rate dongle	
+		# Battery.V:  Supply battery voltage
+		#########################
+		# Convert the DateTime column to a POSIXct object.
+		dattemp$DateTime = as.POSIXct(dattemp$DateTime, tz=myTimeZone, format="%Y-%m-%d %H:%M:%S") 
+		# Look for any dates that happened before July 2022, these must be mis-entered
+		# time values from Jan 2023 that were recorded as Jan 2022
+		if (min(dattemp$DateTime) < as.POSIXct('2022-07-01')){
+			adjustYearRows = which(dattemp$DateTime < as.POSIXct('2022-07-01'))
+			# Add one year's worth of seconds to the DateTime value
+			dattemp$DateTime[adjustYearRows] = dattemp$DateTime[adjustYearRows] + (60*60*24*365)
+		}
+		
+		
+		# Concatenate the data files. 
+		if (exists('dat')){
+			dat = rbind(dat,dattemp)
+		} else {
+			dat = dattemp
+		}
+		
+		# if (f == 1){
+		# 	dat = dattemp
+		# } else if (f > 1){
+		# 	dat = rbind(dat,dattemp)
+		# }
+		
+	}
+	
+	# Add in a column with the oyster code that was passed as an argument to ConcatGapeFile
+	dat$Code = code 
+	
+	# Reorder the concatenated data frame by the DateTime values in case the files were not fed in in chronological order
+	dat = dat[order(dat$DateTime),]
+	# Excise time points when this SN was not associated with the current Code(oyster),
+	# using a start and end time passed to the function as arguments
+	if (!is.null(endDate) & !is.na(endDate)){
+		dat = dat[dat$DateTime>=startDate & dat$DateTime<=endDate, ]
+	} else if (is.null(endDate) | is.na(endDate)){
+		# If no endDate was supplied, just trim data before start Date
+		dat = dat[dat$DateTime>=startDate, ]
+	}
+	
+	
+	if(verbose) close(pb)
+	dat  # return this data frame
+}
+
+##############################################################
+#' Excise questionable rows of data from Hall effect sensor data
+#' 
+#' New idea: take a halldata data frame, which may have a few disjointed periods
+#' of sampling data (from different serial numbers), and map those data onto
+#' a single continuous time series data frame. Then go through the low tide metadata
+#' file and identify all the rows that apply to this particular oyster (based on 
+#' its Code value, which gives site and treatment info), and then use the low tide
+#' servicing start and end times to further NA any rows in the giant time series that
+#' were during low tide service periods. At the end of that, then take the giant
+#' time series and interpolate any small gaps in data, and return the big time
+#' series as a data frame that will later get saved to a csv file. 
+#' 
+#' @param halldata A dataframe containing timestamps and hall effect data from
+#' multiple sensors.
+#' @param metadf A data frame of start and end times to use in the data set,
+#' formatted as POSIXct time stamps in the same time zone as values in the 
+#' timestamps argument. The data frame should also have a column with an OysterID
+#' and a hall effect sensor channel for that oyster for each time period laid
+#' out in the data frame.
+#' @param maxGapFill The maximum number of missing values in the input time 
+#' series to impute via linear interpolation. Gaps longer than this will remain 
+#' as NA values. 
+#' @param maintenance A data frame of start and end times of maintenance of 
+#' battery changes in the field. Start time=start of maintenance. End time=
+#' end of maintenance. Separated by site and treatment. 
+#' @param timeofdeath A timestamp of approximate death of oyster in field. Column
+#' within metadf. 
+#' @return A data frame with columns
+#' added on for each oyster with available hall effect sensor data. Missing 
+#' periods of hall effect values will be denoted with NA values.  
+
+#halldata = gapedat
+#metadf = metafile
+exciseHall = function(halldata, metadf, maintenance, timeofdeath, maxGapFill = 12) {
+	# Get the list of unique OysterID values from excised
+	# oysters = halldata$SN[1]
+	#oysters = oysters[order(oysters)] # reorder if needed 
+	
+	# Generate output data frame based on initial deployment time and final 
+	# raw data time
+	time1 = min(metadf$StartIncludeUTC, na.rm=T)
+	time2 = max(halldata$DateTime, na.rm=T)
+	totaltimeseries = seq(time1,time2,by=60) #every 60 seconds
+	# Create vector to hold hall effect data for this oyster
+	temphall = matrix(data = NA, nrow = length(totaltimeseries), ncol = 5)
+	colnames(temphall) = c('Hall', 'Temp.C','Battery.V','SN', 'Code')
+	# Convert outputdf to a zoo object for easier time handling
+	tempoutput = zoo(temphall,order.by = totaltimeseries)
+	
+	# Remove any possible duplicate timestamps, usually caused by the sensor
+	# briefly resetting itself (losing power) within the same minute
+	dupeRows = (which(diff(halldata$POSIXt) < 1) + 1)
+	if (length(dupeRows)!=0){
+		halldata = halldata[-dupeRows, ]
+	}
+	
+	
+	# Convert the input halldata into a zoo object also
+	temp = zoo(halldata[,c('Hall', 'Temp.C','Battery.V','SN', 'Code')], 
+			order.by = halldata[,"DateTime"], frequency = 2)
+	
+	# Insert the temp data into the zoo object tempoutput
+	# The syntax is fun here: On the left side of the equals sign,
+	# you want a set of indices in tempoutput where the time value
+	# from tempoutput is found %in% the time values of temp. And on the
+	# right side of the equals sign, you want to get hall effect values
+	# from temp where the time value in temp is found %in% the time
+	# values of tempoutput (a much bigger set)
+	tempoutput[index(tempoutput) %in% index(temp), ] = 
+			temp[index(temp) %in% index(tempoutput),]
+	
+	#######################################################
+	# At this point tempoutput should be a long zoo object with timestamnps
+	# running from the date of the first deployment to the last available date
+	# of this particular oyster, with NA's in rows where hall/temperature data
+	# weren't available
+	#######################################################
+	# Go to the low tide servicing metadata file and get the relevant
+	# start and end times for low tide service periods for the site/treatment
+	# that this oyster is at (contained in the Code column)
+	
+	sitecode = substr(halldata$Code[1],1,1)
+	treatmentcode=substr(halldata$Code[1],3,3)
+	# Go to low tide service metafile and find all rows that match
+	# this sitecode (and treatment code) and get the list of those row numbers
+	# Then cycle through those row numbers, in each case grabbing the start time
+	# and end time of the low tide servicing. Then go to tempoutput and find
+	# any rows that are > start time and < end time, and convert NAs. 
+	services = which( (maintenance$sitecode == sitecode) & (maintenance$treatmentcode == treatmentcode) )
+	for (k in (services) ){
+		# Find the matching time stamps and write NAs in between them
+		startTime = maintenance$StartMaintUTC[k]
+		endTime = maintenance$EndMaintUTC[k]
+		# This may not work with tempoutput in the zoo format, but the point is to 
+		# NA those lines that are within the startTime and endTime boundaries
+		tempoutput[which((index(tempoutput) > startTime) & (index(tempoutput) < endTime)),] = NA
+		#tempoutput[which((index(temp) > startTime) & (index(temp) < endTime)),] = NA
+	}
+	
+	
+	# Convert tempoutput back to a data frame and stick it onto an output
+	# dataframe
+	outputdf = data.frame(DateTime = index(tempoutput), tempoutput)
+	#outputdf = data.frame(DateTime = index(temp), temp)
+	# Remove hall data for after an oyster has died
+	
+	if (!is.null(timeofdeath)){
+		if(!is.na(timeofdeath)){
+			outputdf = outputdf[outputdf$DateTime<timeofdeath, ]
+		}
+	}
+	
+	outputdf$Hall = as.numeric(outputdf$Hall)
+	outputdf$Temp.C = as.numeric(outputdf$Temp.C)
+	outputdf$Battery.V = as.numeric(outputdf$Battery.V)
+	
+	
+	outputdf  # return outputdf	
+	
+} # End of exciseHall function
+```
+
+
+# import metadata
+```{r}
+# TODO: Update this to work with the mussel lab salinity metadata file
+
+#import csv metadata_with edits. 
+metafile = loadFieldMetaData(filename = (paste0(metafilePath,"field_metadata_forcoding - Sheet1.csv")))
+
+#import csv maintenance
+maintenance=loadFieldMaintData(filename = (paste0(metafilePath,"lowtide_metadata - Sheet1.csv")))
+
+oystercode = unique(metafile[,'Code'])
+
+#import growth measurements
+growth=read.csv(paste0(metafilePath, "growth_measurements - Sheet1.csv"))
+
+#import allgapemeta
+allgapemeta=read.csv(paste0(NewportDir,"combinedgapemeta/", "allgapemeta.csv"))
+#change datetime to posixct
+allgapemeta$DateTime=as.POSIXct(allgapemeta$DateTime, tz="UTC", format="%Y-%m-%d %H:%M:%S")
+```
