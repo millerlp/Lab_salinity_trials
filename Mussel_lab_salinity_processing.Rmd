@@ -1027,23 +1027,26 @@ exciseHall = function(halldata, metadf, maintenance, timeofdeath, maxGapFill = 1
 # Import metadata
 
 ```{r importMetadata}
-
-
 # readxl package is part of the tidyverse packages
 
-gapeCalibs = readxl::read_excel(paste0(localpath,metafilename), 
+gapeCalibs = readxl::read_excel(paste0(localpath, metafilename), 
 		sheet = 'GapeCalibrations')
 
-musselMetaData = readxl::read_excel(paste0(localpath,metafilename), 
+musselMetaData = readxl::read_excel(paste0(localpath, metafilename), 
 		sheet = 'MusselMetadata')
 
 
 #import csv maintenance
 #maintenance=loadFieldMaintData(filename = (paste0(metafilePath,"lowtide_metadata - Sheet1.csv")))
 
+```
+
+```{r parseGapeCalibData}
 
 
 ```
+
+
 
 # Import and concatenate gape files
 
