@@ -27,12 +27,16 @@ manual quality assurance as needed
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 showcode = FALSE # Set TRUE to print out all code in the output document
-options(digits.secs = 3) # Necessary to deal with sub-second time stamps in heart data
+evalAll = FALSE # Set TRUE to run all chunks including the original data 
+# ingestion, which can take 30 minutes+. 
+options(digits.secs = 3) # Necessary to deal with sub-second time stamps in 
+# heart data
 ```
 
-#libraries
-```{r loadLibraries, echo=FALSE, message=FALSE}
+# Libraries
+```{r loadLibraries, echo=TRUE, message=FALSE}
 library(tidyverse)
+library(readxl)
 #library(scales)
 #library(readr) 
 #library(dplyr)
@@ -45,7 +49,9 @@ library(tidyverse)
 ```
 
 
-# import files
+# Setup
+
+Define paths to files and create functions to handle data
 
 ```{r fileLocations, echo=FALSE}
 # Path from the R code directory to the data directory
@@ -229,7 +235,6 @@ gapBounds2=function(mygaps, maxrow){
 
 
 
-#{r hallFilter_function}
 ################################################################################
 # This filter function probably isn't necessary for the lab salinity trials 
 # since they are collected at much lower frequency (1 minute) compared to the
@@ -282,7 +287,7 @@ hallFilter = function(hallData){
 ####{r DistFromCounts_function}
 ################################################################################
 # LPM: This nonlinear approximation is not likely to be necessary for the
-# calibrated Mytilus used in this experiment, since their opening range is 
+# calibrated Mytilus used in the lab salinity trials, since their opening range is 
 # small enough that a simple linear fit is a sufficient approximation of 
 # gape opening distance. 
 
@@ -710,7 +715,10 @@ loadFieldMaintData <- function(filename,timezone = 'UTC'){
 #' Concatenate multiple daily gape files into one data frame
 #' 
 #' @param filenames A vector of filenames (including path) to be concatenated
-#' @param myTimeZone A text representation of the timezone that the datalogger clock was set to (i.e. 'UTC' or 'PST8PDT' or 'etc/GMT+8')
+#' @param myTimeZone A text representation of the timezone that the datalogger 
+#' clock was set to (i.e. 'UTC' or 'PST8PDT' or 'etc/GMT+8')
+#' @param startDate Used to trim start of data frame
+#' @param endDate Used to trim end of data frame
 #' @param verbose Turn on the progress bar if set to TRUE
 #' @return A data frame consisting of the input files concatenated and sorted chronologically. 
 
@@ -1016,30 +1024,37 @@ exciseHall = function(halldata, metadf, maintenance, timeofdeath, maxGapFill = 1
 ```
 
 
-# import metadata
-```{r}
-# TODO: Update this to work with the mussel lab salinity metadata file
+# Import metadata
 
-#import csv metadata_with edits. 
-metafile = loadFieldMetaData(filename = (paste0(metafilePath,"field_metadata_forcoding - Sheet1.csv")))
+```{r importMetadata}
+
+
+# readxl package is part of the tidyverse packages
+
+gapeCalibs = readxl::read_excel(paste0(localpath,metafilename), 
+		sheet = 'GapeCalibrations')
+
+musselMetaData = readxl::read_excel(paste0(localpath,metafilename), 
+		sheet = 'MusselMetadata')
+
 
 #import csv maintenance
-maintenance=loadFieldMaintData(filename = (paste0(metafilePath,"lowtide_metadata - Sheet1.csv")))
+#maintenance=loadFieldMaintData(filename = (paste0(metafilePath,"lowtide_metadata - Sheet1.csv")))
 
-oystercode = unique(metafile[,'Code'])
 
-#import growth measurements
-growth=read.csv(paste0(metafilePath, "growth_measurements - Sheet1.csv"))
 
-#import allgapemeta
-allgapemeta=read.csv(paste0(NewportDir,"combinedgapemeta/", "allgapemeta.csv"))
-#change datetime to posixct
-allgapemeta$DateTime=as.POSIXct(allgapemeta$DateTime, tz="UTC", format="%Y-%m-%d %H:%M:%S")
 ```
 
 # Import and concatenate gape files
 
-```{r concatGape, echo=showcode}
+The individual daily valve gape files need to be imported for each 
+datalogger/mussel and concatenated into a single long file for each animal. The
+resulting files are written as CSV files that can be reopened later in the 
+script for further processing. The datalogger clocks should all have been set
+to UTC time zone, so this script assumes that when converting dates and times 
+in the data files.
+
+```{r concatGape, echo=showcode, eval = evalAll}
 # In practice you should only need to run this chunk 1 time to generate the 
 # concatenated gape data files for each datalogger (serial number). If new data
 # are later collected for that same datalogger/mussel, you'd need to run this
@@ -1068,13 +1083,30 @@ for (sn in SNnames){
 
 ```
 
+# Import and concatenate heart data
 
-```{r concatHeart,echo=showcode}
+The individual daily heart data files for each datalogger/mussel need to be 
+imported, parsed, and concatenated into one long output file per datalogger.
+The script assumes that in this case the sampling rate for heart data was 8
+samples per second and that a set of 400 samples was collected during each
+sampling interval. 400 samples at 8Hz = 50 seconds of samples. In this lab trial
+loggers were set to collect a new set of samples every 2 minutes (every even
+minute). The concatenated data are written as CSV files that can be reopened
+later in the script for further processing rather than having to do this long
+ingestion process every time. The datalogger clocks should all have been set to
+UTC time zone, so this script assumes that when converting dates and times in
+the data files.
+
+```{r concatHeart,echo=showcode, eval = evalAll}
 # In practice you should only need to run this chunk 1 time to generate the 
 # concatenated gape data files for each datalogger (serial number). If new data
 # are later collected for that same datalogger/mussel, you'd need to run this
 # again to generate the new, longer concatenated file. Otherwise, you should
 # primarily be working from the concatenated data files in later chunks
+
+# This chunk will take 10's of minutes to run if you have lots of files
+# to process (much longer than the gape processing)
+
 #########################################
 # Get a list of datalogger serial numbers to process
 SNnames = dir(path=paste0(localpath,trialpath),recursive=FALSE)
@@ -1097,6 +1129,7 @@ for (sn in SNnames){
 			row.names=FALSE)
 }
 
-
 ```
+
+
 
