@@ -27,6 +27,7 @@ manual quality assurance as needed
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 showcode = FALSE # Set TRUE to print out all code in the output document
+options(digits.secs = 3) # Necessary to deal with sub-second time stamps in heart data
 ```
 
 #libraries
@@ -795,6 +796,102 @@ ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC', code = '',
 	dat  # return this data frame
 }
 
+################################################################
+#' Concatenate heart data from raw data files
+#' 
+#' @param filenames A list of filenames from the datalogger (full path)
+#' @param myTimeZone A text representation of the timezone that the datalogger 
+#' clock was set to (i.e. 'UTC' or 'PST8PDT' or 'etc/GMT+8')
+#' @param code Not used here, could be used if an animal switches serial numbers
+#' @param startDate Used to trim start of data frame
+#' @param endDate Used to trim end of data frame
+#' @param verbose Set to TRUE if you want a text progress bar to show
+#' @param sampleLength The number of samples in a sampling bout. Common values 
+#' are 400 or 240 (50 seconds or 30 seconds at 8Hz interval of BivalveBit)
+
+ConcatHeartFiles <- function(filenames, myTimeZone = 'UTC', code = '', 
+		startDate = NULL, endDate = NULL, verbose=TRUE, sampleLength){
+	
+	if (exists('Heart')) {rm(Heart)} # clear old version of Heart
+	if (verbose){
+		pb = txtProgressBar(min=0,max = length(filenames), style = 3)
+	}
+	
+	# pull HR data and put in Heart
+	for (i in 1:length(filenames)){
+		if(verbose) setTxtProgressBar(pb,i)
+		if(exists('temp')) {rm(temp)} # clear old version of temp
+		
+		hdr  = scan(filenames[i], nlines = 1, what = character(),sep = ',', 
+				quiet = TRUE)
+		# Use the try() function to handle cases where the input file
+		# might be empty
+		try(temp <- read.table(filenames[i],skip = 1, header = FALSE, 
+						sep = ',', na.strings=c("","NA")), silent=TRUE)
+		if (!exists('temp')){
+			next  # If the data frame temp wasn't created, skip the rest 
+			# of this iteration of the loop
+		}
+		
+		colnames(temp) = hdr
+		temp$DateTime  = as.POSIXct(temp$DateTime, tz = 'UTC', 
+				format="%Y-%m-%d %H:%M:%S")
+		
+		# The original data files only had a timestamp every 400 rows
+		# at the start and end of a 400-sample period. It might be useful
+		# to fill in the intervening time values
+		# To preserve this information in csv files, you need to have
+		# set R's options to show 3 digits on time values: 
+		# options(digits.secs = 3)
+		################################################################
+		# Get all rows that have a non-NA timestamp value in them
+		goodvals = which(!is.na(temp$DateTime))
+		# Get the subset where the last digit of the row number is a 1
+		# rather than a 0, since these are the rows at the start of 
+		# each 400-sample chunk (row 1, row 401, row 801 etc.)
+		startRows = goodvals[which((goodvals %% 10)== 1)]
+		# Go through the 400 values and add an incrementing milliseconds
+		# value onto the timestamp.
+		# Add 0.125 seconds to each reading (assumes a 8Hz sample rate). Very 
+		# last reading is the last millisecond in 50 seconds. (49.875seconds) if
+		# 400 sample is the sampleLength
+		for (k in 1:length(startRows)){
+			nextStart = startRows[k]
+			# Generate a set of sampleLength timestamps incrementing by 0.125sec
+			tvals = seq(temp$DateTime[nextStart], by = 0.125, 
+					length.out = sampleLength)
+			temp$DateTime[nextStart : (nextStart+sampleLength-1)] = tvals
+		}
+		
+		# If the user specified startDate and/or endDate, use those to trim the dataset
+		# to remove time points before the startDate or after the endDate
+		if (!is.null(startDate)){
+			if (!is.na(startDate)){
+				temp = temp[temp$DateTime>=startDate, ]	
+			}		
+		}
+		
+		if (!is.null(endDate)){
+			if (!is.na(endDate)){
+				temp = temp[temp$DateTime<=endDate, ]
+			}
+		} 	
+		
+		if(nrow(temp)==0){
+			next
+		}
+		
+		if(!exists('Heart')){
+			Heart = temp
+		} else if (exists('Heart')){
+			Heart = rbind(Heart,temp)
+		}
+	} # end of (i in 1:length(filenames)) loop
+
+	close(pb)
+	Heart # return the Heart data frame
+}  # End of function
+
 ##############################################################
 #' Excise questionable rows of data from Hall effect sensor data
 #' 
@@ -943,6 +1040,11 @@ allgapemeta$DateTime=as.POSIXct(allgapemeta$DateTime, tz="UTC", format="%Y-%m-%d
 # Import and concatenate gape files
 
 ```{r concatGape, echo=showcode}
+# In practice you should only need to run this chunk 1 time to generate the 
+# concatenated gape data files for each datalogger (serial number). If new data
+# are later collected for that same datalogger/mussel, you'd need to run this
+# again to generate the new, longer concatenated file. Otherwise, you should
+# primarily be working from the concatenated data files in later chunks
 
 # Get a list of datalogger serial numbers to process
 SNnames = dir(path=paste0(localpath,trialpath),recursive=FALSE)
@@ -950,20 +1052,51 @@ SNnames = dir(path=paste0(localpath,trialpath),recursive=FALSE)
 
 for (sn in SNnames){
 	# sn will hold the text representation of one of the folders (i.e. 'SN103')
-	# Get a list of the GAPE files in the appopriate data folder
+	# Get a list of the GAPE files in the appropriate data folder
 	fnames = dir(path=paste0(localpath,trialpath,sn), pattern="*GAPE.csv",
 			full.names=TRUE)
 	
 	tempData = ConcatGapeFiles(filenames=fnames,myTimeZone = 'UTC',verbose=TRUE)
 	# Take the data in tempData and put it in a data frame named based on 
 	# the serial number being processed
-	assign(sn,tempData)
+#	assign(sn,tempData)
 	# Write the concatenated data to a csv file
-	write.csv(tempData, file = paste0(localpath,outputgapedir,sn,'.csv'),
+	write.csv(tempData, file = paste0(localpath,outputgapedir,sn,'_gape.csv'),
 			row.names=FALSE)
 }
 
 
-#ConcatGapeFiles(filenames,myTimeZone,code,startDate,endDate,verbose)
+```
+
+
+```{r concatHeart,echo=showcode}
+# In practice you should only need to run this chunk 1 time to generate the 
+# concatenated gape data files for each datalogger (serial number). If new data
+# are later collected for that same datalogger/mussel, you'd need to run this
+# again to generate the new, longer concatenated file. Otherwise, you should
+# primarily be working from the concatenated data files in later chunks
+#########################################
+# Get a list of datalogger serial numbers to process
+SNnames = dir(path=paste0(localpath,trialpath),recursive=FALSE)
+# Should return folder names like "SN103", "SN173"
+
+for (sn in SNnames){
+	# sn will hold the text representation of one of the folders (i.e. 'SN103')
+	# Get a list of the IR (heart sensor) files in the appropriate data folder
+	hnames = dir(path=paste0(localpath,trialpath,sn), pattern="*IR.csv",
+			full.names=TRUE)
+	
+	tempData = ConcatHeartFiles(filenames = hnames, myTimeZone = 'UTC', 
+			verbose = TRUE, sampleLength = 400)
+	# Take the data in tempData and put it in a data frame named based on 
+	# the serial number being processed
+#	assign(sn,tempData)
+	
+	# Write the concatenated data to a csv file
+	write.csv(tempData, file = paste0(localpath,outputheartdir,sn,'_heart.csv'),
+			row.names=FALSE)
+}
+
 
 ```
+
