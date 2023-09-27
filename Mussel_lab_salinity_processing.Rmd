@@ -26,6 +26,7 @@ manual quality assurance as needed
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+showcode = FALSE # Set TRUE to print out all code in the output document
 ```
 
 #libraries
@@ -50,7 +51,13 @@ library(tidyverse)
 localpath = '../../data/Lab_mussel_salinity_trials/LPL_Mytilus_lab_salinity_trials_Summer2023/'  # Luke's path from the R cod dir to the data dir
 
 # Path to the folder with the raw data subfolders
-trialpath = 'Raw_data_files_Summer2023/'
+trialpath = 'Raw_data_files_Summer2023/Trial_data_Aug-Sep_2023/'
+
+# Path to directory to hold concatenated gape files
+outputgapedir = 'Concatenated_gape_files/'
+
+# Path to directory to hold concatenated heart files
+outputheartdir = 'Concatenated_heart_files/'
 
 # Path to the metadata file
 metafilename = 'Mussel_metadata_calibs_Summer2023.xlsx'
@@ -707,9 +714,11 @@ loadFieldMaintData <- function(filename,timezone = 'UTC'){
 #' @return A data frame consisting of the input files concatenated and sorted chronologically. 
 
 # ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC',verbose=TRUE){
-ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC', code = '', startDate = NULL, endDate = NULL, verbose=TRUE){
+ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC', code = '', 
+		startDate = NULL, endDate = NULL, verbose=TRUE){
+	
 	if (exists('dat')) { rm(dat)} # clear dat from memory
-	if(verbose){
+	if (verbose){
 		pb = txtProgressBar(min=0,max = length(filenames), style = 3)
 	}
 # Open the raw data files and concatenate them.
@@ -719,70 +728,69 @@ ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC', code = '', startDate 
 		line1 = scan(con, what='character', nlines = 1, sep = ',', quiet = TRUE)
 		line2 = scan(con, what = 'character', skip = 1, nlines = 1, sep = ',', quiet = TRUE)
 		close(con)
-		if (length(line2) > length(line1)){
-			# There is an extra column in the data section due to a trailing comma in the data rows so we need to handle the column names correctly on import
-			dattemp = read.csv(filenames[f], skip = 1, header = FALSE,
-					col.names = c(line1,'Extra'))
-			# Remove the extra column at the end
-			dattemp = dattemp[,-(ncol(dattemp))]
-		} else {
-			# number of headers is same as number of data columns, so just import as normal
-			dattemp = read.csv(filenames[f])
+		if (length(line2) > 0){
+			if (length(line2) > length(line1)){
+				# There is an extra column in the data section due to a trailing comma in the data rows so we need to handle the column names correctly on import
+				dattemp = read.csv(filenames[f], skip = 1, header = FALSE,
+						col.names = c(line1,'Extra'))
+				# Remove the extra column at the end
+				dattemp = dattemp[,-(ncol(dattemp))]
+			} else {
+				# number of headers is same as number of data columns, so just import as normal
+				dattemp = read.csv(filenames[f])
+			}
+		
+		
+			###########################
+			# Columns:
+			# POSIXt: elapsed seconds since 1970-01-01 00:00:00 (unix epoch) in whatever
+			#         timezone the sensor was set to during deployment. Presumably UTC
+			# DateTime: human-readable character date and time, in whatever timezone the
+			#         sensor was set to during deployment 
+			# SN: serial number of the sensor
+			# Hall: raw Hall effect gape sensor reading
+			# TempC: temperature in Celsius from MAX30101 sensor on the heart rate dongle	
+			# Battery.V:  Supply battery voltage
+			#########################
+			# Convert the DateTime column to a POSIXct object.
+			dattemp$DateTime = as.POSIXct(dattemp$DateTime, tz=myTimeZone, format="%Y-%m-%d %H:%M:%S") 
+			# Look for any dates that happened before July 2022, these must be mis-entered
+			# time values from Jan 2023 that were recorded as Jan 2022
+			if (min(dattemp$DateTime) < as.POSIXct('2022-07-01')){
+				adjustYearRows = which(dattemp$DateTime < as.POSIXct('2022-07-01'))
+				# Add one year's worth of seconds to the DateTime value
+				dattemp$DateTime[adjustYearRows] = dattemp$DateTime[adjustYearRows] + (60*60*24*365)
+			}
+		
+		
+			# Concatenate the data files. 
+			if (exists('dat')){
+				dat = rbind(dat,dattemp)
+			} else {
+				dat = dattemp
+			}
 		}
-		
-		
-		###########################
-		# Columns:
-		# POSIXt: elapsed seconds since 1970-01-01 00:00:00 (unix epoch) in whatever
-		#         timezone the sensor was set to during deployment. Presumably UTC
-		# DateTime: human-readable character date and time, in whatever timezone the
-		#         sensor was set to during deployment 
-		# SN: serial number of the sensor
-		# Hall: raw Hall effect gape sensor reading
-		# TempC: temperature in Celsius from TMP107 sensor on the heart rate dongle	
-		# Battery.V:  Supply battery voltage
-		#########################
-		# Convert the DateTime column to a POSIXct object.
-		dattemp$DateTime = as.POSIXct(dattemp$DateTime, tz=myTimeZone, format="%Y-%m-%d %H:%M:%S") 
-		# Look for any dates that happened before July 2022, these must be mis-entered
-		# time values from Jan 2023 that were recorded as Jan 2022
-		if (min(dattemp$DateTime) < as.POSIXct('2022-07-01')){
-			adjustYearRows = which(dattemp$DateTime < as.POSIXct('2022-07-01'))
-			# Add one year's worth of seconds to the DateTime value
-			dattemp$DateTime[adjustYearRows] = dattemp$DateTime[adjustYearRows] + (60*60*24*365)
-		}
-		
-		
-		# Concatenate the data files. 
-		if (exists('dat')){
-			dat = rbind(dat,dattemp)
-		} else {
-			dat = dattemp
-		}
-		
-		# if (f == 1){
-		# 	dat = dattemp
-		# } else if (f > 1){
-		# 	dat = rbind(dat,dattemp)
-		# }
-		
 	}
 	
 	# Add in a column with the oyster code that was passed as an argument to ConcatGapeFile
-	dat$Code = code 
+#	dat$Code = code 
 	
 	# Reorder the concatenated data frame by the DateTime values in case the files were not fed in in chronological order
 	dat = dat[order(dat$DateTime),]
-	# Excise time points when this SN was not associated with the current Code(oyster),
-	# using a start and end time passed to the function as arguments
-	if (!is.null(endDate) & !is.na(endDate)){
-		dat = dat[dat$DateTime>=startDate & dat$DateTime<=endDate, ]
-	} else if (is.null(endDate) | is.na(endDate)){
-		# If no endDate was supplied, just trim data before start Date
-		dat = dat[dat$DateTime>=startDate, ]
+# If the user specified startDate and/or endDate, use those to trim the dataset
+# to remove time points before the startDate or after the endDate
+	if (!is.null(startDate)){
+		if (!is.na(startDate)){
+			dat = dat[dat$DateTime>=startDate, ]	
+		}		
 	}
 	
-	
+	if (!is.null(endDate)){
+		if (!is.na(endDate)){
+			dat = dat[dat$DateTime<=endDate, ]
+		}
+	} 		
+
 	if(verbose) close(pb)
 	dat  # return this data frame
 }
@@ -930,4 +938,32 @@ growth=read.csv(paste0(metafilePath, "growth_measurements - Sheet1.csv"))
 allgapemeta=read.csv(paste0(NewportDir,"combinedgapemeta/", "allgapemeta.csv"))
 #change datetime to posixct
 allgapemeta$DateTime=as.POSIXct(allgapemeta$DateTime, tz="UTC", format="%Y-%m-%d %H:%M:%S")
+```
+
+# Import and concatenate gape files
+
+```{r concatGape, echo=showcode}
+
+# Get a list of datalogger serial numbers to process
+SNnames = dir(path=paste0(localpath,trialpath),recursive=FALSE)
+# Should return folder names like "SN103", "SN173"
+
+for (sn in SNnames){
+	# sn will hold the text representation of one of the folders (i.e. 'SN103')
+	# Get a list of the GAPE files in the appopriate data folder
+	fnames = dir(path=paste0(localpath,trialpath,sn), pattern="*GAPE.csv",
+			full.names=TRUE)
+	
+	tempData = ConcatGapeFiles(filenames=fnames,myTimeZone = 'UTC',verbose=TRUE)
+	# Take the data in tempData and put it in a data frame named based on 
+	# the serial number being processed
+	assign(sn,tempData)
+	# Write the concatenated data to a csv file
+	write.csv(tempData, file = paste0(localpath,outputgapedir,sn,'.csv'),
+			row.names=FALSE)
+}
+
+
+#ConcatGapeFiles(filenames,myTimeZone,code,startDate,endDate,verbose)
+
 ```
