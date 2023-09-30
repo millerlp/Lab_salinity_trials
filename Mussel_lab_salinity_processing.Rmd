@@ -69,6 +69,9 @@ outputheartdir = 'Concatenated_heart_files/'
 # Path to the metadata file
 metafilename = 'Mussel_metadata_calibs_Summer2023.xlsx'
 
+# File containing the trial salinity/temperature/dissolved oxygen data
+trialfilename = 'Mussel_salinity_temp_data_Summer2023.xlsx'
+
 ```
 
 
@@ -1029,19 +1032,72 @@ exciseHall = function(halldata, metadf, maintenance, timeofdeath, maxGapFill = 1
 ```{r importMetadata}
 # readxl package is part of the tidyverse packages
 
+# Import the calibration sheet
 gapeCalibs = readxl::read_excel(paste0(localpath, metafilename), 
 		sheet = 'GapeCalibrations')
+# Convert MusselID to factor, and remove the underscore in the new column name
+gapeCalibs$MusselID = factor(gapeCalibs$Mussel_ID)
+# Convert from tibble garbage to a regular data frame for regular people
+gapeCalibs = data.frame(gapeCalibs)
 
+# Import the mussel metadata sheet
 musselMetaData = readxl::read_excel(paste0(localpath, metafilename), 
 		sheet = 'MusselMetadata')
+musselMetaData$MusselID = factor(musselMetaData$MusselID)
 
+# Import the sheet with information on start/stop times for trials
+trialMetaData = readxl::read_excel(paste0(localpath, metafilename), 
+		sheet = 'TrialMetadata')
+trialMetaData$MusselID = factor(trialMetaData$MusselID)
+trialMetaData$SerialNumber = factor(trialMetaData$SerialNumber)
+trialMetaData$SalinityTreatment = factor(trialMetaData$SalinityTreatment)
+# The metadata times were recorded in local time (Pacific Daylight Time), but 
+# the read_excel function assumes they're UTC time zone. Use this to swap them
+# to Pacific Daylight Time zone without actually changing the time value
+trialMetaData$AcclimationStartTimePDT = 
+		lubridate::force_tz(trialMetaData$AcclimationStartTime, tzone = 'PST8PDT')
+trialMetaData$TrialStartTimePDT = 
+		lubridate::force_tz(trialMetaData$TrialStartTime, tzone = 'PST8PDT')
+trialMetaData$TrialStopTimePDT = 
+		lubridate::force_tz(trialMetaData$TrialStopTime, tzone = 'PST8PDT')
 
-#import csv maintenance
-#maintenance=loadFieldMaintData(filename = (paste0(metafilePath,"lowtide_metadata - Sheet1.csv")))
 
 ```
 
 ```{r parseGapeCalibData}
+# Process the gape calibration data for each mussel. They are in long format
+# so you need to find all the rows with data for a given mussel, fit a 
+# regression to gauge diameter vs Hall reading, and retain the slope/intercept
+# information for that mussel
+
+# Get a list of mussel IDs
+ids = unique(gapeCalibs$MusselID)
+
+
+for (i in 1:length(ids)){
+	# Subset out all rows for this ID
+	temp = gapeCalibs[which(gapeCalibs$MusselID == ids[i]),]
+	
+	# If there are more than 2 gape measurements, attempt to fit the regression
+	# and otherwise skip this mussel (and perhaps print a warning)
+	if (nrow(temp) > 2){
+		# Fit a regression line through these data points
+		mymod = lm(GaugeDiameter.mm ~ HallReading, data = temp)
+		if (i == 1){
+			# Save the intercept and slope coefficients in a list
+			CalibFits = data.frame(MusselID = as.character(ids[i]),
+					Intercept = mymod$coefficients["(Intercept)"], 
+					Slope = mymod$coefficients[2])	
+		} else if (i > 1) {
+			CalibFits = rbind(CalibFits, 
+					data.frame(MusselID = as.character(ids[i]),
+							Intercept = mymod$coefficients["(Intercept)"], 
+							Slope = mymod$coefficients[2]))
+		}
+	} else {
+		warning('Not enough calibration data to process ', ids[i])
+	}
+}
 
 
 ```
