@@ -76,6 +76,60 @@ trialfilename = 'Mussel_salinity_temp_data_Summer2023.xlsx'
 
 
 ```{r gapeFunctions,echo=FALSE}
+
+
+#' HalltoMM function - use this to convert raw Hall effect values to estimates
+#' of gape opening distance (mm), using calibration data in the CalibFits data
+#' frame
+#' 
+#' @param GapeData A data frame containing a column of raw Hall values and a 
+#' column called 'SN' containing the data logger serial number
+#' @param CalibFits A data frame containing a column called 'SerialNumber' that
+#' is used to match up with the SN value in the GapeData data frame, along with
+#' a column 'Intercept' and a column 'Slope' containing coefficients from a
+#' linear regression of Hall readings vs. known gape distance
+#' 
+#' @return Adds a column called gape.mm into the GapeData data frame with the 
+#' estimated gape distance in mm. Values of gape that calculate out to less
+#' than zero are truncated to zero millimeters.
+
+HalltoMM = function(GapeData, CalibFits) {
+	# Find the data in CalibFits that match the serialnumber, and estimate the
+	# gape opening in millimeters using the stored intercept and slope values
+	# in CalibFits.
+	GapeData$gape.mm = (GapeData$Hall * 
+				CalibFits$Slope[which(CalibFits$SerialNumber == GapeData$SN[1])]) + 
+			CalibFits$Intercept[which(CalibFits$SerialNumber == GapeData$SN[1])]
+	# Truncate any values below zero
+	GapeData$gape.mm[which(GapeData$gape.mm < 0)] = 0
+	 # Return the input data frame with its new data column
+	GapeData
+}
+
+#####################################################################
+#' calcPercentGape function
+#' 
+#' This function assumes that the input values are already converted from raw
+#' Hall sensor values to estimates of gape distance in millimeters. It returns
+#' a vector of gape values expressed as a percentage of the fully open distance
+#' in the range 0-100%.
+#' 
+#' @param gape.mm A vector of shell gape values measured in millimeters
+#' 
+#' @return A vector of gape values converted to a percentage opening (0-100%) 
+
+calcPercentGape <- function(gape.mm){
+	# Convert to percentage by dividing all distances by the maximum value
+	outputData = (gape.mm / max(gape.mm,na.rm=TRUE)) * 100
+	
+	# Round the values off to a reasonable precision
+	outputData = round(outputData,1)
+	
+	# Return the vector of percentage values (0-100%)
+	outputData
+}
+
+
 #TODO: the DistFromCounts, percentileRange, and calcPercentGapeNLME 
 # functions all need to be updated to make use of the more linear
 # calibration data for these mussels
@@ -370,6 +424,9 @@ percentileRange <- function (Hallvec, percentileLim = c(0.01,0.99)){
 	result = c(closedVal, openVal)
 	result # return the two values, always smallest then largest
 }
+
+
+
 
 
 ####{r calcPercentGapeNLME_function}
@@ -1026,8 +1083,9 @@ exciseHall = function(halldata, metadf, maintenance, timeofdeath, maxGapFill = 1
 } # End of exciseHall function
 ```
 
+# Import the data
 
-# Import metadata
+## Import metadata
 
 ```{r importMetadata}
 # readxl package is part of the tidyverse packages
@@ -1064,7 +1122,14 @@ trialMetaData$TrialStopTimePDT =
 
 ```
 
-```{r parseGapeCalibData}
+### Process the calibration data
+
+Mussel gape was calibrated using rods of known diameter stuck into the gaping
+shells at the location of the hall effect sensor/magnet combination, and then
+recording the raw Hall effect reading while the mussel was clamped down on the
+rod. 
+
+```{r parseGapeCalibData, echo = showcode}
 # Process the gape calibration data for each mussel. They are in long format
 # so you need to find all the rows with data for a given mussel, fit a 
 # regression to gauge diameter vs Hall reading, and retain the slope/intercept
@@ -1099,12 +1164,26 @@ for (i in 1:length(ids)){
 	}
 }
 
+# Add the datalogger serial number to each mussel (this will need future work
+# if a mussel switches between datalogger serial numbers during use)
+CalibFits$SerialNumber = NA
+for (i in 1:nrow(CalibFits)){
+	whichSN = as.character(trialMetaData$SerialNumber[which(as.character(trialMetaData$MusselID) == 
+							as.character(CalibFits$MusselID[i]))])
+	if (length(whichSN) > 0){
+		CalibFits$SerialNumber[i] = whichSN
+	}
+}
+
+# With the output CalibFits, you should be able to take any raw Hall reading
+# for a mussel (matching MusselID) and estimate a gape opening using the
+# regression slope and intercept stored in CalibFits
 
 ```
 
 
 
-# Import and concatenate gape files
+## Import and concatenate gape files
 
 The individual daily valve gape files need to be imported for each 
 datalogger/mussel and concatenated into a single long file for each animal. The
@@ -1142,7 +1221,7 @@ for (sn in SNnames){
 
 ```
 
-# Import and concatenate heart data
+## Import and concatenate heart data
 
 The individual daily heart data files for each datalogger/mussel need to be 
 imported, parsed, and concatenated into one long output file per datalogger.
@@ -1191,4 +1270,193 @@ for (sn in SNnames){
 ```
 
 
+## Import salinity/temperature/DO data from trials
+
+TODO: Add code to import associated water quality parameters during the trials
+
+# Process gape data
+
+The concatenated gape files will contain gape data from before, during, and
+after the trials, so we'll want to subset out the relevant chunks of time
+for the mussels involved in a particular trial. The time data should be stored
+in the `trialMetaData` data frame. 
+
+
+
+
+
+```{r loadConcatGapeDataTrial1, echo=showcode}
+# Reimport the concatenated gape data for relevant mussels
+
+# Get the list of MusselID's / SerialNumbers for each mussel involved in Trial1
+
+myTrial = 1
+
+snsControl = as.character(
+		trialMetaData$SerialNumber[which(
+						trialMetaData$SalinityTreatment == 'control' & 
+						trialMetaData$TrialNumber == myTrial)])
+
+snsLowSal = as.character(
+		trialMetaData$SerialNumber[which(
+						trialMetaData$SalinityTreatment == '3psu' & 
+								trialMetaData$TrialNumber == myTrial)])
+
+
+for (i in 1:length(snsControl)){
+	temp = read.csv(file = paste0(localpath,outputgapedir,
+					snsControl[i],'_gape.csv'))
+	# Get start and stop time from trialMetaData 
+	startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+							snsControl[i])]
+	stopTime =  trialMetaData$TrialStopTimePDT[which(
+					trialMetaData$SerialNumber == snsControl[i])]
+
+	# Convert DateTime into POSIXct format and shift to PDT time zone
+	temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
+	attr(temp$DateTime, 'tzone') = 'PST8PDT'
+	# Trim the start and stop times
+	temp = temp[which(temp$DateTime >= startTime),]
+	temp = temp[which(temp$DateTime <= stopTime),]
+	
+	assign(paste0(snsControl[i],'gape'), value = temp)
+}
+
+
+for (i in 1:length(snsLowSal)){
+	temp = read.csv(file = paste0(localpath,outputgapedir,
+					snsLowSal[i],'_gape.csv'))
+	# Get start and stop time from trialMetaData 
+	startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+							snsLowSal[i])]
+	stopTime =  trialMetaData$TrialStopTimePDT[which(
+					trialMetaData$SerialNumber == snsLowSal[i])]
+	
+	# Convert DateTime into POSIXct format and shift to PDT time zone
+	temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
+	attr(temp$DateTime, 'tzone') = 'PST8PDT'
+	# Trim the start and stop times
+	temp = temp[which(temp$DateTime >= startTime),]
+	temp = temp[which(temp$DateTime <= stopTime),]
+	
+	assign(paste0(snsLowSal[i],'gape'), value = temp)
+}
+
+
+quickplot = function(GapeData){
+	plot(GapeData$DateTime, y = GapeData$Hall, type = 'l')
+}
+
+# Controls, Trial 1
+# quickplot(SN173gape)  # data look okay
+# quickplot(SN196gape)  # data look okay
+# quickplot(SN224gape)  # data look okay
+
+# Low salinity Trial 1
+#quickplot(SN189gape)  # data look okay - low for middle of trial
+#quickplot(SN218gape)  # data look okay - low for middle of trial
+# quickplot(SN103gape) # no data past 8/24/2023, don't use
+#quickplot(SN179gape)  # data look okay - low for middle of trial
+
+# Apply the calibration data to estimate gape opening in mm for each mussel
+
+SN173gape = HalltoMM(SN173gape,CalibFits)
+SN196gape = HalltoMM(SN196gape, CalibFits)
+SN224gape = HalltoMM(SN224gape, CalibFits)
+SN189gape = HalltoMM(SN189gape, CalibFits)
+SN218gape = HalltoMM(SN218gape, CalibFits)
+SN179gape = HalltoMM(SN179gape, CalibFits)
+
+SN173gape$gape.pc = calcPercentGape(SN173gape$gape.mm)
+SN196gape$gape.pc = calcPercentGape(SN196gape$gape.mm)
+SN224gape$gape.pc = calcPercentGape(SN224gape$gape.mm)
+SN189gape$gape.pc = calcPercentGape(SN189gape$gape.mm)
+SN218gape$gape.pc = calcPercentGape(SN218gape$gape.mm)
+SN179gape$gape.pc = calcPercentGape(SN179gape$gape.mm)
+
+
+
+
+```
+
+
+```{r loadConcatGapeDataTrial2, echo=showcode}
+# Process the 2nd trial's gape data
+myTrial = 2
+
+snsControl = as.character(
+		trialMetaData$SerialNumber[which(
+						trialMetaData$SalinityTreatment == 'control' & 
+								trialMetaData$TrialNumber == myTrial)])
+
+snsLowSal = as.character(
+		trialMetaData$SerialNumber[which(
+						trialMetaData$SalinityTreatment == '3psu' & 
+								trialMetaData$TrialNumber == myTrial)])
+
+
+for (i in 1:length(snsControl)){
+	temp = read.csv(file = paste0(localpath,outputgapedir,
+					snsControl[i],'_gape.csv'))
+	# Get start and stop time from trialMetaData 
+	startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+							snsControl[i])]
+	stopTime =  trialMetaData$TrialStopTimePDT[which(
+					trialMetaData$SerialNumber == snsControl[i])]
+	
+	# Convert DateTime into POSIXct format and shift to PDT time zone
+	temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
+	attr(temp$DateTime, 'tzone') = 'PST8PDT'
+	# Trim the start and stop times
+	temp = temp[which(temp$DateTime >= startTime),]
+	temp = temp[which(temp$DateTime <= stopTime),]
+	
+	assign(paste0(snsControl[i],'gape'), value = temp)
+}
+
+
+for (i in 1:length(snsLowSal)){
+	temp = read.csv(file = paste0(localpath,outputgapedir,
+					snsLowSal[i],'_gape.csv'))
+	# Get start and stop time from trialMetaData 
+	startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+							snsLowSal[i])]
+	stopTime =  trialMetaData$TrialStopTimePDT[which(
+					trialMetaData$SerialNumber == snsLowSal[i])]
+	
+	# Convert DateTime into POSIXct format and shift to PDT time zone
+	temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
+	attr(temp$DateTime, 'tzone') = 'PST8PDT'
+	# Trim the start and stop times
+	temp = temp[which(temp$DateTime >= startTime),]
+	temp = temp[which(temp$DateTime <= stopTime),]
+	
+	assign(paste0(snsLowSal[i],'gape'), value = temp)
+}
+
+
+# Trial 2 control
+#quickplot(SN217gape) # Not collecting data during trial
+#quickplot(SN214gape) # data look okay
+#quickplot(SN242gape) # stayed closed entire trial
+#quickplot(SN151gape) # no data, malfunctioning sensor reading 1023 only
+
+# Trial2 # low salinity treatment
+#quickplot(SN245gape)  # malfunctioning sensor reads 1023 only
+#quickplot(SN226gape)  # malfunctioning sensor during trial drifts > 500
+#quickplot(SN243gape)  # fully closed entire trial until very end - probably okay
+#quickplot(SN198gape)  # briefly open at start and very end of trial - probaly okay
+
+
+SN214gape = HalltoMM(SN214gape, CalibFits)
+SN242gape = HalltoMM(SN242gape, CalibFits)
+SN243gape = HalltoMM(SN243gape, CalibFits)
+#SN198gape = HalltoMM(SN198gape, CalibFits) # need calibration data
+
+SN214gape$gape.pc = calcPercentGape(SN214gape$gape.mm)
+SN242gape$gape.pc = calcPercentGape(SN242gape$gape.mm)
+SN243gape$gape.pc = calcPercentGape(SN243gape$gape.mm)
+#SN198gape$gape.pc = calcPercentGape(SN198gape$gape.mm) # need calibration data
+
+```
 
