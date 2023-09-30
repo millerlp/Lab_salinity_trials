@@ -70,6 +70,9 @@ outputgapedir = 'Concatenated_gape_files/'
 # Path to directory to hold concatenated heart files
 outputheartdir = 'Concatenated_heart_files/'
 
+# Path to directory to hold processed estimated heart rates
+outputheartratedir = 'Heart_rate_estimates/'
+
 # Path to the metadata file
 metafilename = 'Mussel_metadata_calibs_Summer2023.xlsx'
 
@@ -1467,7 +1470,7 @@ SN243gape$gape.pc = calcPercentGape(SN243gape$gape.mm)
 ```
 
 For the 2nd trial, it appears that there are only usable gape data for two of
-the control mussels (SN214 and SN242, but 242 was colosed the entire time), and
+the control mussels (SN214 and SN242, but 242 was closed the entire time), and
 gape data from low-salinity mussels SN243 and SN198 (but SN198 lacks 
 calibration data currently). 
 
@@ -1786,7 +1789,7 @@ SN173heart$DateTime <- as.POSIXct(SN173heart$DateTime,
 
 ```
 
-```{r processHeartData, echo=showcode}
+```{r processHeartData, echo=showcode, eval = FALSE}
 
 
 # Figure out where the start of each 30-second sampling bout should be. 
@@ -1828,4 +1831,72 @@ close(pb)
 
 
 ```
+
+
+```{r processHeartDataLoop, echo=showcode, eval=FALSE}
+# one-time run of all heart files, will take a few hours
+
+
+# Define the list of serial numbers to process
+mySNs = c('SN173','SN196','SN224','SN189','SN218','SN179','SN214','SN242',
+		'SN243','SN198')
+
+
+for (sn in 1:length(mySNs)){
+	
+	# Load the concatenated heart file
+	SensorData = read.csv(file= paste0(localpath,outputheartdir,
+					mySNs[sn],'_heart.csv'), na.strings = 'NA')
+	SensorData$DateTime <- as.POSIXct(SensorData$DateTime,
+			format = '%Y-%m-%d %H:%M:%OS', tz='UTC')
+	
+	# Figure out where the start of each 30-second sampling bout should be. 
+	# The sampling bouts were typically separated by 5 minutes, so we'll just
+	# look for any time gap that's bigger than 60 seconds. 
+	steps = diff(SensorData$DateTime)
+	bigsteps = which(steps > 60)
+	bigsteps = bigsteps+1
+	bigsteps = c(1,bigsteps) # A set of row indices in SensorData for each new 
+	# sample period
+	
+	
+	# mylowband- filters low freq signals out, gets rid of slow signals
+	mylowband = 1/100  # filtering - ran some at 1/100 as a starting point.
+	# 1/100 filters out more low freq stuff.Can go as low as 1/20, try 1/50 next
+	#myhighband-get rid of high freq noise so you just get normal peaks. 
+	# lower (1/20-->1/15) low band if have low long dips but actually have 
+	# quick peaks in there. Bc the smaller it gets, then only lets 
+	# through small range of freq
+	myhighband = 1/15  # filtering - changing this has the largest effect, start around 1/15
+	#1/5 letting more high freq peaks through. may also catch every little peak.
+	myThreshold = 4 # Minimum agreement between BPM estimates
+	
+	pb = txtProgressBar(min = 0, max = length(bigsteps), style = 3)
+	
+	for (i in 1:length(bigsteps)){
+		setTxtProgressBar(pb,i)
+		res1 = getBPM(SensorData, t1 = bigsteps[i], sensor = 'IR', chunklength = 400,
+				lowband = mylowband, highband = myhighband, amplitudeThreshold = 20,
+				BPMqualityThreshold = myThreshold,
+				maxBPM = 50, Fs = 0.125, plot = FALSE)
+		if (i == 1) {			
+			SensorResult = as.data.frame(res1)
+			SensorResult[2:length(bigsteps),] = NA
+		} else {
+			SensorResult[i,] = as.data.frame(res1)
+		}
+	}
+	close(pb)
+
+	rm(res1, SensorData)
+	
+	# Save an output file for faster loading in next chunks
+	write.csv(SensorResult,
+			file = paste0(localpath,outputheartratedir,mySNs[sn],'_bpm.csv'),  
+			row.names=FALSE)
+
+} # end of sensor loop
+
+```
+
 
