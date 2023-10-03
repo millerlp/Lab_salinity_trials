@@ -367,6 +367,8 @@ for (sn in SNnames){
 			row.names=FALSE)
 }
 
+# Output times are still in UTC time zone
+
 
 ```
 
@@ -416,6 +418,8 @@ for (sn in SNnames){
 			row.names=FALSE)
 }
 
+# Output times are still in UTC time zone
+
 ```
 
 
@@ -451,6 +455,8 @@ snsLowSal = as.character(
 						trialMetaData$SalinityTreatment == '3psu' & 
 								trialMetaData$TrialNumber == myTrial)])
 
+# Be aware that time stamps in the concatenated gape files are still in UTC
+# time zone when imported here
 
 for (i in 1:length(snsControl)){
 	temp = read.csv(file = paste0(localpath,outputgapedir,
@@ -463,7 +469,7 @@ for (i in 1:length(snsControl)){
 
 	# Convert DateTime into POSIXct format and shift to PDT time zone
 	temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
-	attr(temp$DateTime, 'tzone') = 'PST8PDT'
+	attr(temp$DateTime, 'tzone') = 'PST8PDT'  # shift to Pacific Time
 	# Trim the start and stop times
 	temp = temp[which(temp$DateTime >= startTime),]
 	temp = temp[which(temp$DateTime <= stopTime),]
@@ -490,6 +496,10 @@ for (i in 1:length(snsLowSal)){
 	
 	assign(paste0(snsLowSal[i],'gape'), value = temp)
 }
+
+# After these imports, the DateTime column in each of the gape data frames is
+# now in PST8PDT time zone instead of UTC. The data are also trimmed to the 
+# start and stop times of the trial
 
 
 quickplot = function(GapeData){
@@ -522,6 +532,9 @@ SN224gape$gape.pc = calcPercentGape(SN224gape$gape.mm)
 SN189gape$gape.pc = calcPercentGape(SN189gape$gape.mm)
 SN218gape$gape.pc = calcPercentGape(SN218gape$gape.mm)
 SN179gape$gape.pc = calcPercentGape(SN179gape$gape.mm)
+
+# Time values in these data frames are in local PST8PDT time zone
+
 
 ```
 From the 1st trial, there appears to be good gape data from control mussels
@@ -584,6 +597,7 @@ for (i in 1:length(snsLowSal)){
 	assign(paste0(snsLowSal[i],'gape'), value = temp)
 }
 
+# DateTime values are shifted to local time PST8PDT
 
 # Trial 2 control
 #quickplot(SN214gape) # data look okay
@@ -608,6 +622,8 @@ SN214gape$gape.pc = calcPercentGape(SN214gape$gape.mm)
 SN242gape$gape.pc = calcPercentGape(SN242gape$gape.mm)
 SN243gape$gape.pc = calcPercentGape(SN243gape$gape.mm)
 #SN198gape$gape.pc = calcPercentGape(SN198gape$gape.mm) # need calibration data
+
+# DateTime values are shifted to local time PST8PDT
 
 ```
 
@@ -651,7 +667,7 @@ calibration data currently).
 
 getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400, 
 		lowband = 1/100, 
-		highband = 1/15, 
+		highband = 1/10, 
 		amplitudeThreshold = 60,
 		maxBPM = 80,
 		Fs = 0.125,
@@ -927,7 +943,7 @@ Heart processing workflow:
 # Trial 1 low salinity mussels SN189, SN218, and SN179
 
 # If you just want to process one datalogger
-mySNs = 'SN198' 
+mySNs = 'SN173' 
 
 # If you want to process a list of serial numbers all at once
 mySNs = c('SN173','SN196','SN224','SN189','SN218','SN179','SN214','SN242',
@@ -961,7 +977,7 @@ for (sn in 1:length(mySNs)){
 	# lower (1/20-->1/15) low band if have low long dips but actually have 
 	# quick peaks in there. Bc the smaller it gets, then only lets 
 	# through small range of freq
-	myhighband = 1/15  # filtering - changing this has the largest effect, start around 1/15
+	myhighband = 1/10  # filtering - changing this has the largest effect, start around 1/15
 	#1/5 letting more high freq peaks through. may also catch every little peak.
 	myThreshold = 4 # Minimum agreement between BPM estimates
 	
@@ -991,17 +1007,453 @@ for (sn in 1:length(mySNs)){
 
 } # end of sensor loop
 
+# The time values stored in the output file remain in UTC time zone
+
 # Those output heart rates are going to require quality checking afterwards for
 # the times when there was disagreement between the heart rate estimates
 
 ```
 
 
-```{r hearRatechecking,echo=showcode}
+```{r reimportBPMfiles,echo=showcode}
+# Import the algorithm-processed heart rate estimates for all of the 
+# functional sensors and load them into data frames
+
+# Controls, Trial 1:  SN173, SN196, SN224
+# Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
+
+# Trial 2 control: SN214, SN242 (no data SN217, SN151)
+# Trial2 # low salinity treatment: SN243, SN198, (no data SN245, SN226)
+
+# Time values 
+
+myBPMs = c('SN173','SN196','SN224','SN189','SN218','SN179','SN214','SN242',
+		'SN243','SN198')
 
 
-
+for (i in 1:length(myBPMs)){
+	temp = read.csv(file = paste0(localpath,outputheartratedir,
+					myBPMs[i],'_bpm.csv'))
+	# Get start and stop time from trialMetaData 
+	startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+							myBPMs[i])]
+	stopTime =  trialMetaData$TrialStopTimePDT[which(
+					trialMetaData$SerialNumber == myBPMs[i])]
+	
+	# Convert DateTime into POSIXct format and shift to PDT time zone
+	temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
+	attr(temp$DateTime, 'tzone') = 'PST8PDT'  # shift to Pacific Time
+	# Trim the start and stop times
+	temp = temp[which(temp$DateTime >= startTime),]
+	temp = temp[which(temp$DateTime <= stopTime),]
+	
+	assign(paste0(myBPMs[i],'bpm'), value = temp)
+}
 
 ```
 
 
+```{r numberofNAheartrates}
+# Show the number of heart rate readings that came back NA. Ideally this 
+# number is small, but several of the mussels have a large number of readings
+# where the algorithms couldn't agree for some reason or another. 
+length(which(is.na(SN173bpm$finalBPM)))
+length(which(is.na(SN196bpm$finalBPM)))
+length(which(is.na(SN224bpm$finalBPM)))
+length(which(is.na(SN189bpm$finalBPM)))
+length(which(is.na(SN218bpm$finalBPM)))
+length(which(is.na(SN179bpm$finalBPM)))
+length(which(is.na(SN214bpm$finalBPM)))
+length(which(is.na(SN242bpm$finalBPM)))
+length(which(is.na(SN243bpm$finalBPM)))
+length(which(is.na(SN198bpm$finalBPM)))
+
+```
+
+```{r interactivePlotFunctions}
+####################################################################################
+# Creating basic interactive graphing routines that allow a user to press a
+# particular key to create some response
+
+# 2 functions to allow user interaction with a graph
+readkeygraph <- function(prompt)
+{
+	getGraphicsEvent(prompt = prompt, 
+			onMouseDown = NULL, onMouseMove = NULL,
+			onMouseUp = NULL, onKeybd = onKeybd,
+			consolePrompt = "Enter a key:\npress n = next (enters NAs) \nk = keep current values \nr = refilter \nl = less filtering \np = use pracma bpm \nf = use forecast bpm \nb = step back to previous time \nq to quit")
+	Sys.sleep(0.01)
+	return(keyPressed)
+}
+
+onKeybd <- function(key)
+{
+	keyPressed <<- key
+}
+# End of function definitions
+
+```
+
+
+```{r QAvisualInspectionSetup, echo=showcode, eval = evalAll}
+# Go through the results lists and visually inspect timepoints where the
+# heart rate was flagged as questionable. This may be a one-time thing. Run the
+# code in this chunk to open the BPM data and extract the data for your 
+# desired sensor channel ('mysensor'). Then run the code in the next chunk
+# to do the manual inspection. You may save your progress at the end of the
+# next chunk (manually) so that it will be available here the next time you
+# reopen the data file. 
+
+mysensor = 'IR'
+
+mySN = 'SN189'
+
+# Open up the concatenated raw heart data for this mussel
+Heart = read.csv(paste0(localpath,outputheartdir,
+				mySN,'_heart.csv'))
+Heart$DateTime = as.POSIXct(Heart$DateTime, tz = 'UTC', format="%Y-%m-%d %H:%M:%OS")
+# For the time being we will leave the time stamps in UTC
+
+# Open up the output file from the heart rate auto-processing routine
+if (length(dir(path = paste0(localpath,outputheartratedir), 
+				pattern = paste0(mySN,'[[:alnum:][:punct:]]*QA.csv'))) == 1){
+	# If the QA'd version exists already, load that up
+	Heartbpm = read.csv(paste0(localpath,outputheartratedir, mySN,'_bpm_QA.csv'))
+} else {
+	# Reopen the original filtered results file, which hasn't had QA started yet
+	Heartbpm = read.csv(paste0(localpath,outputheartratedir,mySN,'_bpm.csv'))	
+}
+# Convert DateTime to POSIX
+Heartbpm$DateTime = as.POSIXct(Heartbpm$DateTime, tz = 'UTC', format="%Y-%m-%d %H:%M:%S")
+
+# Get start and stop time from trialMetaData 
+startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+						mySN)]
+stopTime =  trialMetaData$TrialStopTimePDT[which(
+				trialMetaData$SerialNumber == mySN)]
+
+startTimeUTC = lubridate::with_tz(startTime, tzone = 'UTC')
+stopTimeUTC = lubridate::with_tz(stopTime, tzone = 'UTC')
+
+# Trim the start and stop times
+Heartbpm = Heartbpm[which(Heartbpm$DateTime >= startTimeUTC),]
+Heartbpm = Heartbpm[which(Heartbpm$DateTime <= stopTimeUTC),]
+
+
+
+
+
+# The heart beat estimates and quality flags are stored in Heartbpm
+
+
+# Define a BPM quality threshold. The BPM estimates from the various methods should 
+# be less than this value, meaning they are in close agreement. 
+BPMqualityThreshold = 4
+
+# Figure out rows where there's disagreement among the 3 methods and also values haven't
+# previously been QA'd. If the row already has been QA'd, this will ignore that row. 
+# This will pull out any row where the disagreement
+# between 2 of the methods is greater than the BPMqualityThreshold
+# and the sensor hasn't been QA'd. This will catch rows with 
+# weak signals though, which may be too many.
+checkTheseRows = which( (Heartbpm$BPMagreeQuality.fft.forecast > BPMqualityThreshold |
+			Heartbpm$BPMagreeQuality.prac.forecast > BPMqualityThreshold |
+		Heartbpm$BPMagreeQuality.prac.fft > BPMqualityThreshold ) &
+	Heartbpm$QA == 'FALSE')
+# give every row where it's not all NAs, include good HR estimates and ones that
+# need to be QAd
+# checkTheseRows = which( (!is.na(Heartbpm$BPMfft)) & (!is.na(Heartbpm$BPMforecast)))
+
+# This version requires the WeakSignalFlag field to be OK instead
+# of FAIL. Useful in cases where large numbers (thousands) of 
+# rows would be caught here, but most of them have such a weak signal
+# that they're not even worth looking at. 
+#checkTheseRows = which( (sensor$BPMagreeQuality.fft.forecast > BPMqualityThreshold | 
+#				sensor$BPMagreeQuality.prac.forecast > BPMqualityThreshold | 
+#				sensor$BPMagreeQuality.prac.fft > BPMqualityThreshold ) & 
+#			sensor$QA == 'FALSE' &
+#			  sensor$WeakSignalFlag == 'OK')
+# Also get the rows with NAs
+NArows = which(is.na(Heartbpm$BPMfft) & is.na(Heartbpm$BPMforecast))
+# Combine the two sets of bad row indices
+badRows = c(checkTheseRows,NArows)
+
+counter = 1 # Start at the first entry in checkTheseRows
+
+if (exists('ManualStart')){
+	# This won't run automatically, but you can use it to find a starting point in the middle 
+	# of the dataset to start at, if you don't want to start at the first entry
+	myTime = as.POSIXct('2022-08-22 10:52:30', tz = 'etc/GMT+8')
+	counter = which.min(abs(myTime - Heartbpm$DateTime[checkTheseRows]))
+}
+
+```
+
+```{r QAmanualVisualInspection,echo=showcode,eval=evalAll}
+# On a Mac in Rstudio, before you run this chunk, run the following on the command line:
+#X11(type='Xlib')
+
+# On a Windows machine in Rstudio, you may instead need to run this line:
+# dev.new()
+
+# The goal is to open a plotting window outside of Rstudio that can accept user input
+
+# The value 'counter' should be defined in the previous chunk
+
+quitFlag = FALSE
+skipFlag = FALSE
+ylims = c(-300,300)
+ylims=NULL
+amplitudeThresh = 10
+chunkLen = 400
+myFs = 0.125
+
+# You should have 
+sensor = Heartbpm  # make a copy of the original data to work on
+
+
+while (!quitFlag){
+	# Get the row index of the next questionable row
+	thisrow = checkTheseRows[counter]
+	
+	# Get the time stamp of the current row
+	tstamp = sensor$DateTime[thisrow]
+	currentBPM=sensor$finalBPM[thisrow]
+	HighBandDenom=sensor$finalfilter[thisrow]
+	QAd=sensor$QA[thisrow]
+	t1 = which.min(abs(tstamp - Heart$DateTime))
+	# Also get the rows for the sample periods before and after the target minute
+	t0 = which.min(abs( (tstamp-120) - Heart$DateTime))
+	t2 = which.min(abs( (tstamp+120) - Heart$DateTime))
+
+	# Make the first version of the plot
+	op = par()
+	par(mfcol = c(1,3), mar = c(5,5,5,1))
+	# Plot the prior minute's data for context
+	junk = getBPM(Heart,t1 = t0, sensor = mysensor, chunklength = chunkLen,
+			lowband = 1/200, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+			maxBPM = 50, Fs = myFs, plot = TRUE, myYlims = ylims)
+	if (is.na(junk$BPMfft) & is.na(junk$BPMforecast) & is.na(junk$BPMpeaks)){
+		# If all of these were NA, there's nothing to plot
+		plot.new()
+		box()
+		text(x=0.5,y=0.5, labels = 'No good data')
+	} 
+	# Plot the one we're interested in
+	res1 = getBPM(Heart,t1 = t1, sensor = mysensor, chunklength = chunkLen,
+			lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+			maxBPM = 50, Fs = myFs, plot = TRUE, myYlims = ylims)
+	#Show currently recorded final BPM (may be NA)
+	mtext(side=3, line=-2, text=paste("Recorded BPM: ", currentBPM), adj=0)
+	#show if previous chunk was QAd 
+	mtext(side=3, line=-3, text=paste("Previous QA: ", ifelse(QAd==TRUE, "TRUE", "FALSE")), adj=0)
+	# Sanity check, if nothing gets plotted then we need to skip
+	if (is.na(res1$BPMfft) & is.na(res1$BPMforecast) & is.na(res1$BPMpeaks)){
+		# If all of these were NA, there's nothing to plot
+		plot.new()
+		box()
+		text(x=0.5,y=0.5, labels = 'No good data')
+		skipFlag = TRUE
+	} 
+	mtext(side = 1, text = paste0(counter,'/',length(checkTheseRows)), adj = 0, line = 2.5)
+	# Plot the next minute's data as well, just for context
+	junk = getBPM(Heart,t1 = t2, sensor = mysensor, chunklength = chunkLen,
+			lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+			maxBPM = 50, Fs = myFs, plot = TRUE, myYlims = ylims)
+	if (is.na(junk$BPMfft) & is.na(junk$BPMforecast) & is.na(junk$BPMpeaks)){
+		# If all of these were NA, there's nothing to plot
+		plot.new()
+		box()
+		text(x=0.5,y=0.5, labels = 'No good data')
+	} 
+	
+	keyPressed = '' # initialize this so that it exists
+	while (keyPressed != 'q'){
+		# First, if the data for the desired time had too many missing values
+	  # and skipFlag is true, handle that case and skip over this time point
+		if (skipFlag){
+			skipFlag = FALSE
+			next
+		}
+		
+		# Use the readkeygraph() function to prompt the user for input on the graph
+		keyPressed = readkeygraph(prompt = "Enter a key: n = next (enters NAs), k = keep [average] 3 BPM values, r = refilter, l = less filtering, p = use pracma bpm, f = use fft bpm, b = step back to previous time, 0 = flatline signal, s = save and quit, q = quit without saving")
+		keyPressed # print the resulting key press, this will be a character value
+		# At this point interpret the resulting key press and cause some
+		# decision to be made 
+		if (keyPressed == 'n'){
+			# User typed n, set the BPM values and flags to NA, this chunk isn't usable
+			sensor[thisrow,3:8] = NA
+			sensor$finalBPM[thisrow] = NA
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # break out of the while loop
+		} else if (keyPressed == 'k') {
+			# User typed k, keep the current values and calculate a final BPM value
+			sensor$finalBPM[thisrow] = round(mean(res1$BPMfft, res1$BPMforecast,res1$BPMpeaks),1)
+			sensor$QA[thisrow] = TRUE
+			# Store the final highband filter value used as well
+			sensor$finalfilter[thisrow] = HighBandDenom
+			keyPressed = 'q'  # Set to q to quit this round of the while loop
+		} else if (keyPressed == 'r') {
+			# Refilter more aggressively
+			HighBandDenom = HighBandDenom + 5 
+			junk = getBPM(Heart,t1 = t0, sensor = mysensor, chunklength = chunkLen,
+					lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+					maxBPM = 80, Fs = myFs, plot = TRUE, myYlims = ylims)
+			res1 = getBPM(Heart,t1 = t1, sensor = mysensor, chunklength = chunkLen,
+					lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+					maxBPM = 80, Fs = myFs, plot = TRUE, myYlims = ylims)
+			junk = getBPM(Heart,t1 = t2, sensor = mysensor, chunklength = chunkLen,
+					lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+					maxBPM = 80, Fs = myFs, plot = TRUE, myYlims = ylims)
+			keypressed = ''
+			# now we return to the top of the while loop
+		} else if (keyPressed == 'l') {
+			# Filter less aggressively
+		  if (HighBandDenom > 5){
+		    	HighBandDenom = HighBandDenom - 5
+		  } else if (HighBandDenom <= 5 & HighBandDenom > 3) {
+		     HighBandDenom = HighBandDenom - 1
+		  } else if (HighBandDenom <= 3){
+		    HighBandDenom = 3
+		  }
+
+			junk = getBPM(Heart,t1 = t0, sensor = mysensor, chunklength = chunkLen,
+					lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+					maxBPM = 50, Fs = myFs, plot = TRUE, myYlims = ylims)
+			res1 = getBPM(Heart,t1 = t1, sensor = mysensor, chunklength = chunkLen,
+					lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+					maxBPM = 50, Fs = myFs, plot = TRUE, myYlims = ylims)
+			junk = getBPM(Heart,t1 = t2, sensor = mysensor, chunklength = chunkLen,
+					lowband = 1/100, highband = 1/HighBandDenom, amplitudeThreshold = amplitudeThresh,
+					maxBPM = 50, Fs = myFs, plot = TRUE, myYlims = ylims)
+			keypressed = ''
+			# Now we return to the top of the while loop
+		} else if (keyPressed == 'p') {
+			# User wants to assign the pracma-derived BPM value as the finalBPM
+			sensor$finalBPM[thisrow] = res1$BPMpeaks
+			# Store the final highband filter value used as well
+			sensor$finalfilter[thisrow] = HighBandDenom
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # set this to move on to next time point
+		} else if (keyPressed == 'f') {
+			# User wants to use the fft-derived BPM value as the finalBPM
+			sensor$finalBPM[thisrow] = res1$BPMfft
+			# Store the final highband filter value used as well
+			sensor$finalfilter[thisrow] = HighBandDenom	
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # set this to move to next time point
+		} else if (keyPressed == 'b') {
+			# User wants to go back to the previous plot, maybe they want to do that
+			# one over again.
+			counter = counter - 2 # Decrement by 2, because the end of the loop will increment by 1 again
+			keyPressed = 'q' # Set to q to exit while loop			
+		} else if (keyPressed == 'q'){
+			quitFlag = TRUE # Set TRUE to exit outer while loop
+		} else if (keyPressed == 's') {
+			# Write the updated data back into the main data frame
+			Heartbpm[which(Heartbpm$Sensor == mysensor),] = sensor
+			# Save the data frame to a csv file
+			write.csv(Heartbpm, file = paste0(heartoutputpath,oy,'_bpm_QA.csv'), 
+					row.names=FALSE)
+			# User wants to save progress and quit
+			keyPressed = 'q' # Set to q to exit while loop
+			quitFlag = TRUE # Set TRUE to exit outer while loop
+		} else if (keyPressed == '0'){
+		  sensor$finalBPM[thisrow] = 0
+		  sensor$finalfilter[thisrow] = HighBandDenom
+		  sensor$QA = TRUE
+		  keyPressed = 'q' # Set to q to exit while loop
+		} else {
+			# Key pressed wasn't one of the choices above, so do some default action
+			mtext(side = 3, line = -2, text = "No sensible choice made")
+		}
+	}
+	keyPressed = '' # reset the value
+	counter = counter+1 # increment the counter
+	if(counter > length(checkTheseRows)){
+	  quitFlag = TRUE
+	}
+	par(op)
+	
+	
+}
+
+print(paste('Last row checked: ', checkTheseRows[i], ' time: ', sensor$DateTime[thisrow]))
+
+# At the end of the loop, the 'sensor' data frame should have the 'finalBPM' values
+# assigned in most rows (besides rows with bad data)
+	
+
+# userInput = readline(prompt = "Save progress? y or n: \n")
+userInput = askYesNo(msg = "Save progress? y or n: \n")
+
+if(userInput){
+	# Write the updated data back into the main data frame
+	Heartbpm = sensor
+	# Save the data frame to a csv file
+	write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv'), 
+			row.names=FALSE)
+} else {
+  print("Updates not saved.")
+}
+
+```
+
+
+```{r openQAdHeartRate,echo=showcode}
+
+myBPMs = c('SN173','SN196','SN224','SN189','SN218','SN179','SN214','SN242',
+		'SN243','SN198')
+
+
+for (i in 1:length(myBPMs)){
+	if (length(dir(path = paste0(localpath,outputheartratedir), 
+					pattern = paste0(myBPMs[i],'[[:alnum:][:punct:]]*QA.csv'))) == 1){
+		temp = read.csv(file = paste0(localpath,outputheartratedir,
+						myBPMs[i],'_bpm_QA.csv'))
+		# Get start and stop time from trialMetaData 
+		startTime = trialMetaData$TrialStartTimePDT[which(trialMetaData$SerialNumber ==
+								myBPMs[i])]
+		stopTime =  trialMetaData$TrialStopTimePDT[which(
+						trialMetaData$SerialNumber == myBPMs[i])]
+		
+		# Convert DateTime into POSIXct format and shift to PDT time zone
+		temp$DateTime = as.POSIXct(temp$DateTime, tz = 'UTC')
+		attr(temp$DateTime, 'tzone') = 'PST8PDT'  # shift to Pacific Time
+		# Trim the start and stop times
+		temp = temp[which(temp$DateTime >= startTime),]
+		temp = temp[which(temp$DateTime <= stopTime),]
+		
+		assign(paste0(myBPMs[i],'bpmQA'), value = temp)
+	}
+}
+
+
+```
+
+```{r testPlot,echo=showcode}
+# Controls, Trial 1:  SN173, SN196, SN224
+# Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
+
+# Trial 2 control: SN214, SN242 (no data SN217, SN151)
+# Trial2 # low salinity treatment: SN243, SN198, (no data SN245, SN226)
+
+par(mfrow=c(2,1))
+# Plot the QA'd heart rate data and gape data for SN173 in Trial 1 (Control)
+plot(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, type = 'l', 
+		ylim = c(0,30), las = 1)
+lines(SN173gape$DateTime, SN173gape$gape.mm, type = 'l', col = 'blue')
+legend('topleft',legend=c('Heart rate','Gape, mm'), col = c('black','blue'),
+		lty= c(1,1))
+title('SN173 Control')
+
+plot(SN189bpmQA$DateTime, SN189bpmQA$finalBPM, type = 'l', col = 2,
+		ylim = c(0,30), las = 1)
+lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =3)
+legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,3),
+		lty= c(1,1))
+title('SN189 Low Salinity')
+
+
+```
