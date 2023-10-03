@@ -1616,7 +1616,7 @@ getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400,
 
 	
 
-	if (length(which(is.na(detrendedIR))) == 0) {
+	if (length(which(is.na(detrendedIR))) == 0 & (var(detrendedIR) > 0) ) {
 
 	# Define a butterworth filter
 	# Consider using the bandpass filter rather than just a lowpass filter
@@ -1740,9 +1740,10 @@ getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400,
 							resultsList$BPMforecast,
 							resultsList$BPMpeaks), digits = 1)
 		}
-	} else if (length( which( is.na(temp[,sensor]) ) ) > 0) {
+	} else if (length( which( is.na(temp[,sensor]) ) ) > 0 | (var(detrendedIR) == 0)) {
 		# Handle the case where there are NAs in the data chunk that prevent
-		# the filtering and fft routines
+		# the filtering and fft routines, or the sensor was disconnected and
+		# only returning zeros (leading to no variance)
 		resultsList = list(DateTime = temp$DateTime[1],
 				Sensor = sensor,
 				BPMfft = NA,
@@ -1767,79 +1768,30 @@ getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400,
 ```
 
 
-```{r importTrial1heart, echo=showcode}
 
-# TODO: 
-# * Import a concatenated heart file from one of the 'good' mussels that also have
-# usable gape data
-# * Truncate heart data to the time period of the trial (to speed processing)
-# * Run through the automated heart rate algorithm
-# * Quality check the heart rate estimates and potentially visually inspect
-# * Generate time-stamped set of heart rate estimates for each mussel
-
-# control mussels SN173, SN196, and SN224. 
-# low salinity mussels SN189, SN218, and SN179
-
-# Reading in a 200MB+ text file takes longer than you'd think
-SN173heart <- read.csv(file=paste0(localpath,outputheartdir,'SN173_heart.csv'), 
-		na.strings = 'NA') 
-# Convert to POSIXct time stamps. Use the %OS option to retain milliseconds values
-SN173heart$DateTime <- as.POSIXct(SN173heart$DateTime,
-		format = '%Y-%m-%d %H:%M:%OS', tz='UTC')
-
-```
-
-```{r processHeartData, echo=showcode, eval = FALSE}
-
-
-# Figure out where the start of each 30-second sampling bout should be. 
-# The sampling bouts were typically separated by 5 minutes, so we'll just
-# look for any time gap that's bigger than 60 seconds. 
-steps = diff(SN173heart$DateTime)
-bigsteps = which(steps > 60)
-bigsteps = bigsteps+1
-bigsteps = c(1,bigsteps) # A set of row indices in Heart for each new sample period
-
-
-# mylowband- filters low freq signals out, gets rid of slow signals
-mylowband = 1/100  # filtering - ran some at 1/100 as a starting point.
-# 1/100 filters out more low freq stuff.Can go as low as 1/20, try 1/50 next
-#myhighband-get rid of high freq noise so you just get normal peaks. 
-# lower (1/20-->1/15) low band if have low long dips but actually have 
-# quick peaks in there. Bc the smaller it gets, then only lets 
-# through small range of freq
-myhighband = 1/15  # filtering - changing this has the largest effect, start around 1/15
-#1/5 letting more high freq peaks through. may also catch every little peak.
-myThreshold = 4 # Minimum agreement between BPM estimates
-
-pb = txtProgressBar(min = 0, max = length(bigsteps), style = 3)
-
-for (i in 1:length(bigsteps)){
-	setTxtProgressBar(pb,i)
-	res1 = getBPM(SN173heart, t1 = bigsteps[i], sensor = 'IR', chunklength = 400,
-			lowband = mylowband, highband = myhighband, amplitudeThreshold = 20,
-			BPMqualityThreshold = myThreshold,
-			maxBPM = 80, Fs = 0.125, plot = FALSE)
-	if (i == 1) {			
-		SensorResult = as.data.frame(res1)
-		SensorResult[2:length(bigsteps),] = NA
-	} else {
-		SensorResult[i,] = as.data.frame(res1)
-	}
-}
-close(pb)
-
-
-```
+Heart processing workflow:  
+* Import a concatenated heart file from one of the 'good' mussels that also have
+ usable gape data
+* Truncate heart data to the time period of the trial (optional, to speed
+  processing)
+* Run through the automated heart rate algorithm
+* Quality check the heart rate estimates and potentially visually inspect
+* Generate time-stamped set of heart rate estimates for each mussel
 
 
 ```{r processHeartDataLoop, echo=showcode, eval=FALSE}
 # one-time run of all heart files, will take a few hours
+# Trial 1 Control mussels SN173, SN196, and SN224. 
+# Trial 1 low salinity mussels SN189, SN218, and SN179
 
+# If you just want to process one datalogger
+mySNs = 'SN198' 
 
-# Define the list of serial numbers to process
+# If you want to process a list of serial numbers all at once
 mySNs = c('SN173','SN196','SN224','SN189','SN218','SN179','SN214','SN242',
 		'SN243','SN198')
+
+
 
 
 for (sn in 1:length(mySNs)){
@@ -1896,6 +1848,9 @@ for (sn in 1:length(mySNs)){
 			row.names=FALSE)
 
 } # end of sensor loop
+
+# Those output heart rates are going to require quality checking afterwards for
+# the times when there was disagreement between the heart rate estimates
 
 ```
 
