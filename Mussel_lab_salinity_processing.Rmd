@@ -1104,9 +1104,15 @@ onKeybd <- function(key)
 # next chunk (manually) so that it will be available here the next time you
 # reopen the data file. 
 
+# Controls, Trial 1:  SN173, SN196, SN224
+# Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
+
+# Trial 2 control: SN214, SN242 (no data SN217, SN151)
+# Trial2 # low salinity treatment: SN243, SN198, (no data SN245, SN226)
+
 mysensor = 'IR'
 
-mySN = 'SN189'
+mySN = 'SN218'
 
 # Open up the concatenated raw heart data for this mussel
 Heart = read.csv(paste0(localpath,outputheartdir,
@@ -1439,7 +1445,7 @@ for (i in 1:length(myBPMs)){
 # Trial 2 control: SN214, SN242 (no data SN217, SN151)
 # Trial2 # low salinity treatment: SN243, SN198, (no data SN245, SN226)
 
-par(mfrow=c(2,1))
+par(mfrow=c(3,1))
 # Plot the QA'd heart rate data and gape data for SN173 in Trial 1 (Control)
 plot(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, type = 'l', 
 		ylim = c(0,30), las = 1)
@@ -1454,6 +1460,20 @@ lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =3)
 legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,3),
 		lty= c(1,1))
 title('SN189 Low Salinity')
+
+# SN218 had a relatively weak signal and therefore a lot of readings couldn't
+# be positively assigned a heart rate. There are periods during the 
+# low salinity section where it appeared that it was only producing 1 beat 
+# irregularly during the 50 seconds and then staying mostly flat the rest of the 
+# time, and this single beat would repeat in each of the subsequent 2 minute 
+# interval samples. So I'm almost willing to say that it was doing 1 beat per
+# minute for a long time while closed, but I had to assign NAs to those periods
+plot(SN218bpmQA$DateTime, SN218bpmQA$finalBPM, type = 'l', col = 4,
+		ylim = c(0,30), las = 1)
+lines(SN218gape$DateTime, SN218gape$gape.mm, type = 'l', col =5)
+legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(4,5),
+		lty= c(1,1))
+title('SN218 Low Salinity')
 
 
 ```
