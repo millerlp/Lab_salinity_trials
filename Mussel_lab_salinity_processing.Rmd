@@ -668,7 +668,7 @@ calibration data currently).
 getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400, 
 		lowband = 1/100, 
 		highband = 1/10, 
-		amplitudeThreshold = 60,
+		amplitudeThreshold = 80,
 		maxBPM = 80,
 		Fs = 0.125,
 		BPMqualityThreshold = 4,
@@ -789,7 +789,7 @@ getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400,
 		}
 
 		# Apply the filter to the detrended data chunk
-		y = filtfilt(bf, x = detrendedIR)
+		y = signal::filtfilt(bf, x = detrendedIR)
 		# Calculate the spectrum of the filtered data
 		myfft2 = spectrum(y, plot = FALSE)
 		# Take the peak frequency from the spectrum, divide by sampling
@@ -1112,7 +1112,7 @@ onKeybd <- function(key)
 
 mysensor = 'IR'
 
-mySN = 'SN218'
+mySN = 'SN173'
 
 # Open up the concatenated raw heart data for this mussel
 Heart = read.csv(paste0(localpath,outputheartdir,
@@ -1197,7 +1197,7 @@ if (exists('ManualStart')){
 
 ```{r QAmanualVisualInspection,echo=showcode,eval=evalAll}
 # On a Mac in Rstudio, before you run this chunk, run the following on the command line:
-#X11(type='Xlib')
+X11(type='Xlib')
 
 # On a Windows machine in Rstudio, you may instead need to run this line:
 # dev.new()
@@ -1210,7 +1210,7 @@ quitFlag = FALSE
 skipFlag = FALSE
 ylims = c(-300,300)
 ylims=NULL
-amplitudeThresh = 10
+amplitudeThresh = 60
 chunkLen = 400
 myFs = 0.125
 
