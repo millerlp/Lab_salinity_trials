@@ -1770,3 +1770,46 @@ mtext(side = 3, text = 'Low Salinity, SN218', line = -1.5, cex = 0.8)
 ######################
 ```
 
+
+
+## Example field salinity data
+```{r loadCTDOmatFiles, echo=showcode}
+# Some example salinity data from the 2019-2020 LPL deployment (with oysters)
+
+# Directory with CTDO sensor data from the oyster mooring in LPL
+CTDOdir = '../../data/Weather_water_data/LPL_mooring_data_2019-2020/CTDOs/LPL_oyster_mooring_CTDOs/'
+CTDObottomFile = 'SBE37SMP-ODO-RS232_03713802_2020_05_11_v6.mat'
+CTDOsurfaceFile = 'SBE37SMP-ODO-RS232_03714707_2020_05_14_v6.mat'
+
+# Make sure package R.matlab has been loaded
+# Import bottom-mounted CTD data
+ctdBottom = R.matlab::readMat(paste0(CTDOdir,CTDObottomFile))
+ctdBottom$DateTimeUTC = as.POSIXct((ctdBottom$dateUTC - 719529)*86400, 
+		origin = "1970-01-01", tz = "UTC")
+ctdBottom = ctdBottom[c('DateTimeUTC','pres','con','sal','temp','O2mgl',
+				'O2perc','depth','density')]
+ctdBottom$DateTimePST = ctdBottom$DateTimeUTC
+attr(ctdBottom$DateTimePST,'tzone') = 'etc/GMT+8'
+ctdBottom = as.data.frame(ctdBottom)
+
+# Import surface CTD data
+ctdSurface = R.matlab::readMat(paste0(CTDOdir, CTDOsurfaceFile))
+ctdSurface$DateTimeUTC = as.POSIXct((ctdSurface$dateUTC - 719529)*86400, 
+		origin = "1970-01-01", tz = "UTC")
+ctdSurface = ctdSurface[c('DateTimeUTC','pres','con','sal','temp','O2mgl',
+				'O2perc','depth','density')]
+ctdSurface$DateTimePST = ctdSurface$DateTimeUTC
+attr(ctdSurface$DateTimePST,'tzone') = 'etc/GMT+8'
+ctdSurface = as.data.frame(ctdSurface)
+
+# Look at the period 2020-03-12 12:30:02 PST thru 2020-03-12 17:15:02 for
+# example of a very fast drop from 31PSU to 3PSU over ~5 hours
+
+# 2020-03-17 10:55 (29PSU) to 2020-03-17 19:45 (1.1PSU) ~9 hours
+
+# 2020-03-23 13:55 (31PSU) to 2020-03-23 18:50 (2.6PSU) ~5 hours
+
+# Also look at the ctdBottom data on 2019-12-26 between ~10AM and 14:00 for
+# a super-fast drop from 30 to ~1PSU over the course of about 4 hours.
+
+```
