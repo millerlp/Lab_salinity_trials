@@ -1,6 +1,8 @@
 ---
 title: "LPL lab mussel salinity trials"
-output: html_document
+output: 
+  html_document:
+    keep_md: yes
 editor_options: 
   chunk_output_type: console
   markdown: 
@@ -10,15 +12,8 @@ editor_options:
 
 # TODOs
 
-* Write code to import all gape files from a particular mussel (SN###) and
-  concatenate them into a single file
 
-* Process those concatenated data to convert raw gape values into estimates of
-gape opening %
-
-* Write code to import and concatenate heart data files for each mussel
-
-* Write code to process raw heart data into beats per minute estimates, with
+* process raw heart data into beats per minute estimates, with
 manual quality assurance as needed
 
 * Other stuff
@@ -268,8 +263,9 @@ trialMetaData$TrialStartTimePDT =
 trialMetaData$TrialStopTimePDT = 
 		lubridate::force_tz(trialMetaData$TrialStopTime, tzone = 'PST8PDT')
 
-
 ```
+
+
 
 ### Process the calibration data
 
@@ -425,7 +421,106 @@ for (sn in SNnames){
 
 ## Import salinity/temperature/DO data from trials
 
-TODO: Add code to import associated water quality parameters during the trials
+
+```{r importSalinityData,echo=showcode}
+#############################################################
+# Import the salinity/temp/DO data file
+
+waterdata = readxl::read_excel(paste0(localpath,trialfilename),
+		sheet = 'SalinityTempData')
+# DateTime is imported as UTC, but was recorded in the original file
+# as PDT, so change the associated time zone
+waterdata$DateTime = lubridate::force_tz(waterdata$DateTime, 
+		tzone = 'PST8PDT')
+
+# Drop the Notes column
+waterdata = waterdata[,-which(colnames(waterdata)=='Notes')]
+
+# It will probably be easiest to refer to these by their data logger
+# serial numbers, so merge the SNs into this data frame
+waterdata = merge(waterdata, trialMetaData[,c('MusselID','SerialNumber')], by.x = 'MusselID', by.y = 'MusselID')
+# Reorder by time of observation
+waterdata = waterdata[order(waterdata$DateTime),]
+
+waterdata$SalinityTreatment = factor(waterdata$SalinityTreatment)
+waterdata$TrialNumber = factor(waterdata$TrialNumber)
+
+```
+
+```{r plotSalinitydataTrial1,echo=showcode}
+
+# Trial 1
+
+tr1 = waterdata[which(waterdata$TrialNumber == '1'),]
+tr1 = droplevels(tr1)
+
+plot(tr1$DateTime, y = tr1$Salinity_psu, type='n',
+		ylab = 'Salinity, psu', las = 1, 
+		xlab = 'Time')
+for (i in 1:length(levels(tr1$SerialNumber))){
+	thisSN = levels(tr1$SerialNumber)[i]
+	dat = tr1[which(tr1$SerialNumber == thisSN),]
+	
+	if(dat$SalinityTreatment[1] == '3psu') {
+		mycol = 3
+	} else if (dat$SalinityTreatment[1] == 'control') {
+		mycol = 4
+	}
+	
+	lines(dat$DateTime, dat$Salinity_psu, col = mycol)
+}
+legend('bottomleft', legend = c('Control','3 psu'), col = c(4,3),
+		lty = c(1,1))
+mtext(side = 3, text = 'Trial 1')
+
+declineStart = as.POSIXct('2023-08-28 14:20',tz='PST8PDT')
+declineFinish = as.POSIXct('2023-08-28 22:30',tz='PST8PDT')
+riseStart = as.POSIXct('2023-08-29 11:40',tz='PST8PDT')
+riseFinish= as.POSIXct('2023-08-29 15:10',tz='PST8PDT')
+
+#abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
+
+```
+
+
+```{r plotSalinitydataTrial2,echo=showcode}
+
+# Trial 2
+
+tr2 = waterdata[which(waterdata$TrialNumber == '2'),]
+tr2 = droplevels(tr2)
+
+plot(tr2$DateTime, y = tr2$Salinity_psu, type='n',
+		ylab = 'Salinity, psu', las = 1, 
+		xlab = 'Time')
+for (i in 1:length(levels(tr2$SerialNumber))){
+	thisSN = levels(tr2$SerialNumber)[i]
+	dat = tr2[which(tr2$SerialNumber == thisSN),]
+	
+	if(dat$SalinityTreatment[1] == '3psu') {
+		mycol = 3
+	} else if (dat$SalinityTreatment[1] == 'control') {
+		mycol = 4
+	}
+	
+	lines(dat$DateTime, dat$Salinity_psu, col = mycol)
+}
+legend('bottomleft', legend = c('Control','3 psu'), col = c(4,3),
+		lty = c(1,1))
+mtext(side = 3, text = 'Trial 2')
+
+declineStart2 = as.POSIXct('2023-09-19 10:00',tz='PST8PDT')
+declineFinish2 = as.POSIXct('2023-09-19 15:20',tz='PST8PDT')
+riseStart2 = as.POSIXct('2023-09-20 10:00',tz='PST8PDT')
+riseFinish2 = as.POSIXct('2023-09-20 19:10',tz='PST8PDT')
+
+abline(v = c(declineStart2, declineFinish2,riseStart2,riseFinish2))
+
+declineFinish2 - declineStart2
+riseFinish2 - riseStart2
+
+```
+
 
 # Process gape data
 
@@ -1407,8 +1502,13 @@ if(userInput){
 ```
 
 
-```{r openQAdHeartRate,echo=showcode}
 
+
+
+# Output plots Trial 1
+
+```{r openQAdHeartRate,echo=showcode}
+# Reopen the QA'd heart data for which ever SNs have been processed
 myBPMs = c('SN173','SN196','SN224','SN189','SN218','SN179','SN214','SN242',
 		'SN243','SN198')
 
@@ -1438,31 +1538,71 @@ for (i in 1:length(myBPMs)){
 
 ```
 
-```{r testPlot,echo=showcode}
+```{r testPlotTrial1,echo=showcode}
 # Controls, Trial 1:  SN173, SN196, SN224
 # Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
 
 # Trial 2 control: SN214, SN242 (no data SN217, SN151)
 # Trial2 # low salinity treatment: SN243, SN198, (no data SN245, SN226)
 
-par(mfrow=c(3,1))
+par(mfrow=c(4,1))
+
+myBPMylims = c(0,32)
+
+# Plot the salinity data
+# Trial 1
+
+tr1 = waterdata[which(waterdata$TrialNumber == '1'),]
+tr1 = droplevels(tr1)
+
+plot(tr1$DateTime, y = tr1$Salinity_psu, type='n',
+		ylab = 'Salinity, psu', las = 1, 
+		xlab = 'Time')
+for (i in 1:length(levels(tr1$SerialNumber))){
+	thisSN = levels(tr1$SerialNumber)[i]
+	dat = tr1[which(tr1$SerialNumber == thisSN),]
+	
+	if(dat$SalinityTreatment[1] == '3psu') {
+		mycol = 3
+	} else if (dat$SalinityTreatment[1] == 'control') {
+		mycol = 4
+	}
+	
+	lines(dat$DateTime, dat$Salinity_psu, col = mycol)
+}
+legend('bottomleft', legend = c('Control','3 psu'), col = c(4,3),
+		lty = c(1,1))
+mtext(side = 3, text = 'Trial 1')
+
+declineStart = as.POSIXct('2023-08-28 14:20',tz='PST8PDT')
+declineFinish = as.POSIXct('2023-08-28 22:30',tz='PST8PDT')
+riseStart = as.POSIXct('2023-08-29 11:40',tz='PST8PDT')
+riseFinish= as.POSIXct('2023-08-29 15:10',tz='PST8PDT')
+
+abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
+
+
+####################################
 # Plot the QA'd heart rate data and gape data for SN173 in Trial 1 (Control)
 # Generally had good well-defined heart signal with high amplitude, although
 # there were some sections that seemed arhythmic and had to be scored NA
 plot(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, type = 'l', 
-		ylim = c(0,30), las = 1)
+		ylim = myBPMylims , las = 1)
 lines(SN173gape$DateTime, SN173gape$gape.mm, type = 'l', col = 'blue')
 legend('topleft',legend=c('Heart rate','Gape, mm'), col = c('black','blue'),
 		lty= c(1,1))
 title('SN173 Control')
-
+abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
+###################################
 plot(SN189bpmQA$DateTime, SN189bpmQA$finalBPM, type = 'l', col = 2,
-		ylim = c(0,30), las = 1)
+		ylim = myBPMylims , las = 1)
 lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =3)
 legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,3),
 		lty= c(1,1))
 title('SN189 Low Salinity')
+abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
 
+##################################
 # SN218 had a relatively weak signal and therefore a lot of readings couldn't
 # be positively assigned a heart rate. There are periods during the 
 # low salinity section where it appeared that it was only producing 1 beat 
@@ -1471,11 +1611,162 @@ title('SN189 Low Salinity')
 # interval samples. So I'm almost willing to say that it was doing 1 beat per
 # minute for a long time while closed, but I had to assign NAs to those periods
 plot(SN218bpmQA$DateTime, SN218bpmQA$finalBPM, type = 'l', col = 4,
-		ylim = c(0,30), las = 1)
+		ylim = myBPMylims , las = 1)
 lines(SN218gape$DateTime, SN218gape$gape.mm, type = 'l', col =5)
 legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(4,5),
 		lty= c(1,1))
 title('SN218 Low Salinity')
-
+abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
 
 ```
+
+
+```{r comboTrial1Plot, echo=showcode, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
+
+
+#Panel the graphs
+#layout(matrix(c(1,2,3,4,5,6,7), nrow = 7, ncol = 1),
+#		heights = lcm(c(2.5,2.5,2.5,2.5,2.5,3.25,3.5)),respect=TRUE)
+
+layout(matrix(c(1,2,3,4), nrow = 4, ncol = 1),
+		heights = lcm(c(2.5,2.5,2.5,3)),respect=TRUE)
+par(mar = c(0,6.5,0,1))
+mylwd = 2
+mycex = 1.25
+mygray = 'grey80'
+mycexlab = 1.7
+ylabline = 7
+myBPMylims = c(0,34)
+
+#vgrids = as.POSIXct(c('2020-12-29 00:00',
+#				'2020-12-30 00:00', '2020-12-31 00:00'), tz = 'etc/GMT+8')
+mytimestart = as.POSIXct('2023-08-28 09:00', tz = 'PST8PDT')
+mytimeend = as.POSIXct('2023-08-29 15:10', tz = 'PST8PDT')
+
+
+#plot.new()
+par(mar = c(0,12,0.5,4)) # Margins for all plots except the bottom plot
+####################################################################
+# Plot 1 - Salinity data
+tr1 = waterdata[which(waterdata$TrialNumber == '1'),]
+tr1 = droplevels(tr1)
+
+plot(tr1$DateTime, y = tr1$Salinity_psu, type='n',
+		ylab = 'Salinity, psu', las = 1, 
+		xlab = 'Time', xaxt = 'n')
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygray)
+for (i in 1:length(levels(tr1$SerialNumber))){
+	thisSN = levels(tr1$SerialNumber)[i]
+	dat = tr1[which(tr1$SerialNumber == thisSN),]
+	
+	if(dat$SalinityTreatment[1] == '3psu') {
+		mycol = 3
+	} else if (dat$SalinityTreatment[1] == 'control') {
+		mycol = 'royalblue'
+	}
+	
+	lines(dat$DateTime, dat$Salinity_psu, col = mycol)
+}
+legend('bottomleft', legend = c('Control','Low salinity'), col = c(4,3),
+		lty = c(1,1))
+mtext(side = 3, text = 'Trial 1')
+###############################################
+####################################
+# Plot the QA'd heart rate data and gape data for SN173 in Trial 1 (Control)
+# Generally had good well-defined heart signal with high amplitude, although
+# there were some sections that seemed arhythmic and had to be scored NA
+plot(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, type = 'l', 
+		ylim = myBPMylims , las = 1, 
+		xaxt = 'n',
+		ylab = '', axes = FALSE)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2)
+mtext(text='Heart rate, bpm', side = 2, line = 3, col = 2, cex = 0.7)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygray)
+abline(h = 0)
+lines(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, col = 2)
+
+oldpar <- par()
+par(new=TRUE)
+#lines(SN173gape$DateTime, SN173gape$gape.mm, type = 'l', col = 4)
+plot(SN173gape$DateTime, SN173gape$gape.mm, type = 'l', col = 4,
+		axes = FALSE, ylim = c(0,8), ylab = '')
+axis(side = 4, ylim =c(0,10), col = 4, las = 1, col.axis = 4)
+mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = 0.7, col = 4)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+mtext(side = 3, text = 'Control, SN173', line = -1.5, cex = 0.8)
+#abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
+
+#par(oldpar) 
+
+###################################
+###################################
+plot(SN189bpmQA$DateTime, SN189bpmQA$finalBPM, type = 'l', col = 2,
+		ylim = myBPMylims , las = 1,
+		ylab = '', axes = FALSE,
+		xaxt = 'n')
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygray)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2)
+mtext(text='Heart rate, bpm', side = 2, line = 3, col = 2, cex = 0.7)
+abline(h = 0)
+lines(SN189bpmQA$DateTime, SN189bpmQA$finalBPM, col = 2)
+
+par(new=TRUE)
+#lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =4)
+plot(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =4,
+		axes = FALSE, ylim = c(0,8), ylab = '')
+axis(side = 4, ylim =c(0,10), col = 4, las = 1, col.axis = 4)
+mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = 0.7, col = 4)
+
+lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =4)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+
+mtext(side = 3, text = 'Low Salinity, SN189', line = -1.5, cex = 0.8)
+#abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
+###########################################
+
+par(mar = c(1,12,0.5,4)) # Margin for the bottom plot, leave space for x-axis labels
+
+##################################
+# SN218 had a relatively weak signal and therefore a lot of readings couldn't
+# be positively assigned a heart rate. There are periods during the 
+# low salinity section where it appeared that it was only producing 1 beat 
+# irregularly during the 50 seconds and then staying mostly flat the rest of the 
+# time, and this single beat would repeat in each of the subsequent 2 minute 
+# interval samples. So I'm almost willing to say that it was doing 1 beat per
+# minute for a long time while closed, but I had to assign NAs to those periods
+plot(SN218bpmQA$DateTime, SN218bpmQA$finalBPM, type = 'l', col = 4,
+		ylim = myBPMylims , las = 1,
+		ylab = '', yaxt = 'n')
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygray)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2)
+mtext(text='Heart rate, bpm', side = 2, line = 3, col = 2, cex = 0.7)
+abline(h = 0)
+lines(SN218bpmQA$DateTime, SN218bpmQA$finalBPM, col = 2)
+
+par(new=TRUE)
+# Plot the gape data using a 2nd y-axis
+plot(SN218gape$DateTime, SN218gape$gape.mm, type = 'l', col =4,
+		axes = FALSE, ylim = c(0,8), ylab = '')
+axis(side = 4, ylim =c(0,10), col = 4, las = 1, col.axis = 4)
+mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = 0.7, col = 4)
+#lines(SN218gape$DateTime, SN218gape$gape.mm, type = 'l', col =4)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+mtext(side = 3, text = 'Low Salinity, SN218', line = -1.5, cex = 0.8)
+
+#abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
+
+
+######################
+```
+
