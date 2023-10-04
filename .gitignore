@@ -6,6 +6,11 @@
 .RData
 .RDataTmp
 
+*.md
+*.html
+
+/Mussel_lab_salinity_processing_files/
+
 # User-specific files
 .Ruserdata
 
