@@ -337,6 +337,107 @@ script for further processing. The datalogger clocks should all have been set
 to UTC time zone, so this script assumes that when converting dates and times 
 in the data files.
 
+
+```{r ConcatGapeFilesFunction,echo=showcode}
+################################################################
+# ConcatGapeFiles
+# This function deals with the GAPE data files that have an 
+# unnecessary comma at the end of each row of data, which messes with the 
+# read.csv import function
+
+#' Concatenate multiple daily gape files into one data frame
+#' 
+#' @param filenames A vector of filenames (including path) to be concatenated
+#' @param myTimeZone A text representation of the timezone that the datalogger 
+#' clock was set to (i.e. 'UTC' or 'PST8PDT' or 'etc/GMT+8')
+#' @param startDate Used to trim start of data frame
+#' @param endDate Used to trim end of data frame
+#' @param verbose Turn on the progress bar if set to TRUE
+#' @return A data frame consisting of the input files concatenated and sorted chronologically. 
+
+# ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC',verbose=TRUE){
+ConcatGapeFiles <- function(filenames, myTimeZone = 'UTC', code = '', 
+		startDate = NULL, endDate = NULL, verbose=TRUE){
+	
+	if (exists('dat')) { rm(dat)} # clear dat from memory
+	if (verbose){
+		pb = txtProgressBar(min=0,max = length(filenames), style = 3)
+	}
+# Open the raw data files and concatenate them.
+	for (f in 1:length(filenames)){
+		if(verbose) setTxtProgressBar(pb,f)
+		con = file(filenames[f])
+		line1 = scan(con, what='character', nlines = 1, sep = ',', quiet = TRUE)
+		line2 = scan(con, what = 'character', skip = 1, nlines = 1, sep = ',', quiet = TRUE)
+		close(con)
+		if (length(line2) > 0){
+			if (length(line2) > length(line1)){
+				# There is an extra column in the data section due to a trailing comma in the data rows so we need to handle the column names correctly on import
+				dattemp = read.csv(filenames[f], skip = 1, header = FALSE,
+						col.names = c(line1,'Extra'))
+				# Remove the extra column at the end
+				dattemp = dattemp[,-(ncol(dattemp))]
+			} else {
+				# number of headers is same as number of data columns, so just import as normal
+				dattemp = read.csv(filenames[f])
+			}
+			
+			
+			###########################
+			# Columns:
+			# POSIXt: elapsed seconds since 1970-01-01 00:00:00 (unix epoch) in whatever
+			#         timezone the sensor was set to during deployment. Presumably UTC
+			# DateTime: human-readable character date and time, in whatever timezone the
+			#         sensor was set to during deployment 
+			# SN: serial number of the sensor
+			# Hall: raw Hall effect gape sensor reading
+			# TempC: temperature in Celsius from MAX30101 sensor on the heart rate dongle	
+			# Battery.V:  Supply battery voltage
+			#########################
+			# Convert the DateTime column to a POSIXct object.
+			dattemp$DateTime = as.POSIXct(dattemp$DateTime, tz=myTimeZone, format="%Y-%m-%d %H:%M:%S") 
+			# Look for any dates that happened before July 2022, these must be mis-entered
+			# time values from Jan 2023 that were recorded as Jan 2022
+			if (min(dattemp$DateTime) < as.POSIXct('2022-07-01')){
+				adjustYearRows = which(dattemp$DateTime < as.POSIXct('2022-07-01'))
+				# Add one year's worth of seconds to the DateTime value
+				dattemp$DateTime[adjustYearRows] = dattemp$DateTime[adjustYearRows] + (60*60*24*365)
+			}
+			
+			
+			# Concatenate the data files. 
+			if (exists('dat')){
+				dat = rbind(dat,dattemp)
+			} else {
+				dat = dattemp
+			}
+		}
+	}
+	
+	
+	# Reorder the concatenated data frame by the DateTime values in case the files were not fed in in chronological order
+	dat = dat[order(dat$DateTime),]
+# If the user specified startDate and/or endDate, use those to trim the dataset
+# to remove time points before the startDate or after the endDate
+	if (!is.null(startDate)){
+		if (!is.na(startDate)){
+			dat = dat[dat$DateTime>=startDate, ]	
+		}		
+	}
+	
+	if (!is.null(endDate)){
+		if (!is.na(endDate)){
+			dat = dat[dat$DateTime<=endDate, ]
+		}
+	} 		
+	
+	if(verbose) close(pb)
+	dat  # return this data frame
+}
+```
+
+
+
 ```{r concatGape, echo=showcode, eval = evalAll}
 # In practice you should only need to run this chunk 1 time to generate the 
 # concatenated gape data files for each datalogger (serial number). If new data
@@ -381,6 +482,107 @@ later in the script for further processing rather than having to do this long
 ingestion process every time. The datalogger clocks should all have been set to
 UTC time zone, so this script assumes that when converting dates and times in
 the data files.
+
+
+```{r ConcatHeartFilesFunction,echo=showcode}
+################################################################
+#' Concatenate heart data from raw data files
+#' 
+#' @param filenames A list of filenames from the datalogger (full path)
+#' @param myTimeZone A text representation of the timezone that the datalogger 
+#' clock was set to (i.e. 'UTC' or 'PST8PDT' or 'etc/GMT+8')
+#' @param code Not used here, could be used if an animal switches serial numbers
+#' @param startDate Used to trim start of data frame
+#' @param endDate Used to trim end of data frame
+#' @param verbose Set to TRUE if you want a text progress bar to show
+#' @param sampleLength The number of samples in a sampling bout. Common values 
+#' are 400 or 240 (50 seconds or 30 seconds at 8Hz interval of BivalveBit)
+
+ConcatHeartFiles <- function(filenames, myTimeZone = 'UTC', code = '', 
+		startDate = NULL, endDate = NULL, verbose=TRUE, sampleLength){
+	
+	if (exists('Heart')) {rm(Heart)} # clear old version of Heart
+	if (verbose){
+		pb = txtProgressBar(min=0,max = length(filenames), style = 3)
+	}
+	
+	# pull HR data and put in Heart
+	for (i in 1:length(filenames)){
+		if(verbose) setTxtProgressBar(pb,i)
+		if(exists('temp')) {rm(temp)} # clear old version of temp
+		
+		hdr  = scan(filenames[i], nlines = 1, what = character(),sep = ',', 
+				quiet = TRUE)
+		# Use the try() function to handle cases where the input file
+		# might be empty
+		try(temp <- read.table(filenames[i],skip = 1, header = FALSE, 
+						sep = ',', na.strings=c("","NA")), silent=TRUE)
+		if (!exists('temp')){
+			next  # If the data frame temp wasn't created, skip the rest 
+			# of this iteration of the loop
+		}
+		
+		colnames(temp) = hdr
+		temp$DateTime  = as.POSIXct(temp$DateTime, tz = 'UTC', 
+				format="%Y-%m-%d %H:%M:%S")
+		
+		# The original data files only had a timestamp every 400 rows
+		# at the start and end of a 400-sample period. It might be useful
+		# to fill in the intervening time values
+		# To preserve this information in csv files, you need to have
+		# set R's options to show 3 digits on time values: 
+		# options(digits.secs = 3)
+		################################################################
+		# Get all rows that have a non-NA timestamp value in them
+		goodvals = which(!is.na(temp$DateTime))
+		# Get the subset where the last digit of the row number is a 1
+		# rather than a 0, since these are the rows at the start of 
+		# each 400-sample chunk (row 1, row 401, row 801 etc.)
+		startRows = goodvals[which((goodvals %% 10)== 1)]
+		# Go through the 400 values and add an incrementing milliseconds
+		# value onto the timestamp.
+		# Add 0.125 seconds to each reading (assumes a 8Hz sample rate). Very 
+		# last reading is the last millisecond in 50 seconds. (49.875seconds) if
+		# 400 sample is the sampleLength
+		for (k in 1:length(startRows)){
+			nextStart = startRows[k]
+			# Generate a set of sampleLength timestamps incrementing by 0.125sec
+			tvals = seq(temp$DateTime[nextStart], by = 0.125, 
+					length.out = sampleLength)
+			temp$DateTime[nextStart : (nextStart+sampleLength-1)] = tvals
+		}
+		
+		# If the user specified startDate and/or endDate, use those to trim the dataset
+		# to remove time points before the startDate or after the endDate
+		if (!is.null(startDate)){
+			if (!is.na(startDate)){
+				temp = temp[temp$DateTime>=startDate, ]	
+			}		
+		}
+		
+		if (!is.null(endDate)){
+			if (!is.na(endDate)){
+				temp = temp[temp$DateTime<=endDate, ]
+			}
+		} 	
+		
+		if(nrow(temp)==0){
+			next
+		}
+		
+		if(!exists('Heart')){
+			Heart = temp
+		} else if (exists('Heart')){
+			Heart = rbind(Heart,temp)
+		}
+	} # end of (i in 1:length(filenames)) loop
+	
+	close(pb)
+	Heart # return the Heart data frame
+}  # End of function
+
+```
+
 
 ```{r concatHeart,echo=showcode, eval = evalAll}
 # In practice you should only need to run this chunk 1 time to generate the 
