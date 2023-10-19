@@ -1455,7 +1455,7 @@ while (!quitFlag){
 			# Write the updated data back into the main data frame
 			Heartbpm[which(Heartbpm$Sensor == mysensor),] = sensor
 			# Save the data frame to a csv file
-			write.csv(Heartbpm, file = paste0(heartoutputpath,oy,'_bpm_QA.csv'), 
+			write.csv(Heartbpm, file = paste0(heartoutputpath,mySN,'_bpm_QA.csv'), 
 					row.names=FALSE)
 			# User wants to save progress and quit
 			keyPressed = 'q' # Set to q to exit while loop
