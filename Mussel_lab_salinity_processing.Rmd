@@ -1494,10 +1494,10 @@ if (exists('ManualStart')){
 
 ```{r QAmanualVisualInspection,echo=showcode,eval=evalAll}
 # On a Mac in Rstudio, before you run this chunk, run the following on the command line:
-X11(type='Xlib')
+#X11(type='Xlib')
 
 # On a Windows machine in Rstudio, you may instead need to run this line:
-# dev.new()
+ dev.new()
 
 # The goal is to open a plotting window outside of Rstudio that can accept user input
 
@@ -1681,19 +1681,19 @@ while (!quitFlag){
 #			Heartbpm[which(Heartbpm$Sensor == mysensor),] = sensor
 			Heartbpm = sensor
 			# Save the data frame to a csv file
-			Heartbpm$DateTimeUTC = strftime(Heartbpm$DateTimeUTC,
+			Heartbpm$DateTime = strftime(Heartbpm$DateTime,
 					'%Y-%m-%d %H:%M:%S', tz = 'UTC')
 			# Save the data frame to a csv file
-			write.csv(Heartbpm, file = paste0(outputheartratedir,mySN,'_bpm_QA.csv'), 
+			write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv'), 
 					row.names=FALSE)
 			# User wants to save progress and quit
 			keyPressed = 'q' # Set to q to exit while loop
 		} else if (keyPressed == 'q'){
 			Heartbpm = sensor
-			Heartbpm$DateTimeUTC = strftime(Heartbpm$DateTimeUTC,
+			Heartbpm$DateTime = strftime(Heartbpm$DateTime,
 					'%Y-%m-%d %H:%M:%S', tz = 'UTC')
 			# Save the data frame to a csv file
-			write.csv(Heartbpm, file = paste0(outputheartratedir,mySN,'_bpm_QA.csv'), 
+			write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv'), 
 					row.names=FALSE)
 			quitFlag = TRUE # Set TRUE to exit outer while loop
 		} else {
@@ -1711,7 +1711,7 @@ while (!quitFlag){
 	
 }
 
-print(paste('Last row checked: ', checkTheseRows[i], ' time: ', sensor$DateTime[thisrow]))
+print(paste('Last row checked: ', checkTheseRows[counter], ' time: ', sensor$DateTime[thisrow]))
 
 # At the end of the loop, the 'sensor' data frame should have the 'finalBPM' values
 # assigned in most rows (besides rows with bad data)
@@ -1719,7 +1719,7 @@ print(paste('Last row checked: ', checkTheseRows[i], ' time: ', sensor$DateTime[
 
 # Write the updated data back into the main data frame
 Heartbpm = sensor
-Heartbpm$DateTimeUTC = strftime(Heartbpm$DateTimeUTC,
+Heartbpm$DateTime = strftime(Heartbpm$DateTime,
 		'%Y-%m-%d %H:%M:%S', tz = 'UTC')
 # Save the data frame to a csv file
 write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv'), 
