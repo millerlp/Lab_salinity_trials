@@ -1378,7 +1378,7 @@ readkeygraph <- function(prompt)
 	getGraphicsEvent(prompt = prompt, 
 			onMouseDown = NULL, onMouseMove = NULL,
 			onMouseUp = NULL, onKeybd = onKeybd,
-			consolePrompt = "Enter a key:\npress n = next (enters NAs) \nk = keep current values \nr = refilter \nl = less filtering \np = use pracma bpm \nf = use forecast bpm \nb = step back to previous time \nq to quit")
+			consolePrompt = "Enter a key:\npress n = next (enters NAs) \nk = keep current values \nr = refilter \nl = less filtering \np = use pracma bpm \nf = use fft bpm \nb = step back to previous time \ns = skip forward \n0 = censored flatline value \n2,3,4 = manually enter low rate\nq = save and quit")
 	Sys.sleep(0.01)
 	return(keyPressed)
 }
@@ -1580,7 +1580,7 @@ while (!quitFlag){
 		}
 		
 		# Use the readkeygraph() function to prompt the user for input on the graph
-		keyPressed = readkeygraph(prompt = "Enter a key: n = next (enters NAs), k = keep [average] 3 BPM values, r = refilter, l = less filtering, p = use pracma bpm, f = use fft bpm, b = step back to previous time, 0 = flatline signal, s = save and quit, q = quit without saving")
+		keyPressed = readkeygraph(prompt = "Enter a key: n = next (enters NAs), k = keep [average] 3 BPM values, r = refilter, l = less filtering, p = use pracma bpm, f = use fft bpm, b = step back to previous time, 0 = flatline signal, 2,3,4 = manually enter low rate, s = skip to next, q = quit and save")
 		keyPressed # print the resulting key press, this will be a character value
 		# At this point interpret the resulting key press and cause some
 		# decision to be made 
@@ -1650,23 +1650,52 @@ while (!quitFlag){
 			# User wants to go back to the previous plot, maybe they want to do that
 			# one over again.
 			counter = counter - 2 # Decrement by 2, because the end of the loop will increment by 1 again
-			keyPressed = 'q' # Set to q to exit while loop			
-		} else if (keyPressed == 'q'){
-			quitFlag = TRUE # Set TRUE to exit outer while loop
+			keyPressed = 'q' # Set to q to exit while loop	
+		} else if (keyPressed == '0'){
+			# Use the zero option to denote 'censored' values where the rate
+			# is too slow for the sensor + algorithm to effectively detect it
+			sensor$finalBPM[thisrow] = 0
+			sensor$finalfilter[thisrow] = HighBandDenom
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # set this to move on to next time point
+		} else if (keyPressed == '2') {
+			# Manually enter a value of 2 bpm
+			sensor$finalBPM[thisrow] = 2
+			sensor$finalfilter[thisrow] = HighBandDenom
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # set this to move on to next time point
+		} else if (keyPressed == '3') {
+			# Manually enter a value of 3 bpm
+			sensor$finalBPM[thisrow] = 3
+			sensor$finalfilter[thisrow] = HighBandDenom
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # set this to move on to next time point
+		} else if (keyPressed == '4') {
+			# Manually enter a value of 3 bpm
+			sensor$finalBPM[thisrow] = 4
+			sensor$finalfilter[thisrow] = HighBandDenom
+			sensor$QA[thisrow] = TRUE
+			keyPressed = 'q' # set this to move on to next time point
 		} else if (keyPressed == 's') {
-			# Write the updated data back into the main data frame
-			Heartbpm[which(Heartbpm$Sensor == mysensor),] = sensor
+			# Skip to next time point, and also save a copy of the data
+#			Heartbpm[which(Heartbpm$Sensor == mysensor),] = sensor
+			Heartbpm = sensor
 			# Save the data frame to a csv file
-			write.csv(Heartbpm, file = paste0(heartoutputpath,mySN,'_bpm_QA.csv'), 
+			Heartbpm$DateTimeUTC = strftime(Heartbpm$DateTimeUTC,
+					'%Y-%m-%d %H:%M:%S', tz = 'UTC')
+			# Save the data frame to a csv file
+			write.csv(Heartbpm, file = paste0(outputheartratedir,mySN,'_bpm_QA.csv'), 
 					row.names=FALSE)
 			# User wants to save progress and quit
 			keyPressed = 'q' # Set to q to exit while loop
+		} else if (keyPressed == 'q'){
+			Heartbpm = sensor
+			Heartbpm$DateTimeUTC = strftime(Heartbpm$DateTimeUTC,
+					'%Y-%m-%d %H:%M:%S', tz = 'UTC')
+			# Save the data frame to a csv file
+			write.csv(Heartbpm, file = paste0(outputheartratedir,mySN,'_bpm_QA.csv'), 
+					row.names=FALSE)
 			quitFlag = TRUE # Set TRUE to exit outer while loop
-		} else if (keyPressed == '0'){
-		  sensor$finalBPM[thisrow] = 0
-		  sensor$finalfilter[thisrow] = HighBandDenom
-		  sensor$QA = TRUE
-		  keyPressed = 'q' # Set to q to exit while loop
 		} else {
 			# Key pressed wasn't one of the choices above, so do some default action
 			mtext(side = 3, line = -2, text = "No sensible choice made")
@@ -1688,18 +1717,13 @@ print(paste('Last row checked: ', checkTheseRows[i], ' time: ', sensor$DateTime[
 # assigned in most rows (besides rows with bad data)
 	
 
-# userInput = readline(prompt = "Save progress? y or n: \n")
-userInput = askYesNo(msg = "Save progress? y or n: \n")
-
-if(userInput){
-	# Write the updated data back into the main data frame
-	Heartbpm = sensor
-	# Save the data frame to a csv file
-	write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv'), 
-			row.names=FALSE)
-} else {
-  print("Updates not saved.")
-}
+# Write the updated data back into the main data frame
+Heartbpm = sensor
+Heartbpm$DateTimeUTC = strftime(Heartbpm$DateTimeUTC,
+		'%Y-%m-%d %H:%M:%S', tz = 'UTC')
+# Save the data frame to a csv file
+write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv'), 
+		row.names=FALSE)
 
 ```
 
