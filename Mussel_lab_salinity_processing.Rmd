@@ -1494,10 +1494,10 @@ if (exists('ManualStart')){
 
 ```{r QAmanualVisualInspection,echo=showcode,eval=evalAll}
 # On a Mac in Rstudio, before you run this chunk, run the following on the command line:
-#X11(type='Xlib')
+X11(type='Xlib')
 
 # On a Windows machine in Rstudio, you may instead need to run this line:
- dev.new()
+# dev.new()
 
 # The goal is to open a plotting window outside of Rstudio that can accept user input
 
