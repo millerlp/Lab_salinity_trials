@@ -2666,3 +2666,46 @@ ctdSurface = as.data.frame(ctdSurface)
 # a super-fast drop from 30 to ~1PSU over the course of about 4 hours.
 
 ```
+
+
+```{r ctdPlot1,echo=showcode}
+myd1 = as.POSIXct('2020-03-17 09:00', tz='etc/GMT+8')
+myd2 = as.POSIXct('2020-03-19 21:00', tz='etc/GMT+8')
+
+temp = ctdSurface[ctdSurface$DateTimePST >= myd1 & ctdSurface$DateTimePST <= myd2,]
+
+plot(x = temp$DateTimePST, y = temp$sal, type = 'l')
+
+
+```
+
+
+```{r ctdPlot2,echo=showcode}
+myd1 = as.POSIXct('2020-03-23 13:00', tz='etc/GMT+8')
+myd2 = as.POSIXct('2020-03-24 21:00', tz='etc/GMT+8')
+
+temp = ctdSurface[ctdSurface$DateTimePST >= myd1 & ctdSurface$DateTimePST <= myd2,]
+
+plot(x = temp$DateTimePST, y = temp$sal, type = 'l', las = 1,
+		xlab = 'Time', ylab = 'Salinity, PSU')
+```
+
+```{r LPLSalinityDec2019,echo=showcode, dev = 'png', fig.width = 7, fig.height = 4, dpi = 300}
+# LPL December 2019 following a rainstorm
+myd1 = as.POSIXct('2019-12-26 08:00', tz='etc/GMT+8')
+myd2 = as.POSIXct('2019-12-27 14:00', tz='etc/GMT+8')
+
+temp = ctdSurface[ctdSurface$DateTimePST >= myd1 & ctdSurface$DateTimePST <= myd2,]
+
+plot(x = temp$DateTimePST, y = temp$sal, type = 'l', las = 1,
+		xlab = 'Time', ylab = 'Salinity, PSU', xaxs = 'i', lwd = 2)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygray)
+abline(v = myseq, lty = 3, col = 'white')
+mtext(side = 3, text = 'Los Penasquitos Lagoon surface water, Dec 26-27 2019')
+lines(x = temp$DateTimePST, y = temp$sal, lwd = 2)
+myseq = seq(from = myd1, by = 3600, length.out = 32)
+
+```
+
