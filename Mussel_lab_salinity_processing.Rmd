@@ -10,14 +10,6 @@ editor_options:
 ---
 
 
-# TODOs
-
-
-* process raw heart data into beats per minute estimates, with
-manual quality assurance as needed
-
-* Other stuff
-
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -55,7 +47,7 @@ Define paths to files and create functions to handle data
 
 ```{r fileLocations, echo=FALSE}
 # Path from the R code directory to the data directory
-localpath = '../../data/Lab_mussel_salinity_trials/LPL_Mytilus_lab_salinity_trials_Summer2023/'  # Luke's path from the R cod dir to the data dir
+localpath = '../../data/Lab_mussel_salinity_trials/LPL_Mytilus_lab_salinity_trials_Summer2023/'  # Luke's path from the R code dir to the data dir
 
 # Path to the folder with the raw data subfolders
 trialpath = 'Raw_data_files_Summer2023/Trial_data_Aug-Sep_2023/'
@@ -100,7 +92,7 @@ Trial 2 finished the salinity rise 2023-09-20 19:10PDT
 
 ## Import metadata
 
-```{r importMetadata}
+```{r importMetadata, cache=TRUE}
 # readxl package is part of the tidyverse packages
 
 # Import the calibration sheet
@@ -665,7 +657,7 @@ for (sn in SNnames){
 ## Import salinity/temperature/DO data from trials
 
 
-```{r importSalinityData,echo=showcode}
+```{r importSalinityData,echo=showcode, cache=TRUE}
 #############################################################
 # Import the salinity/temp/DO data file
 
@@ -776,7 +768,7 @@ in the `trialMetaData` data frame.
 
 
 
-```{r loadConcatGapeDataTrial1, echo=showcode}
+```{r loadConcatGapeDataTrial1, echo=showcode, cache=TRUE}
 # Reimport the concatenated gape data for relevant mussels
 
 # Get the list of MusselID's / SerialNumbers for each mussel involved in Trial1
@@ -889,7 +881,7 @@ appear to be usable.
 
 
 
-```{r loadConcatGapeDataTrial2, echo=showcode}
+```{r loadConcatGapeDataTrial2, echo=showcode, cache = TRUE}
 # Process the 2nd trial's gape data
 myTrial = 2
 
@@ -1361,7 +1353,7 @@ for (sn in 1:length(mySNs)){
 ```
 
 
-```{r reimportBPMfiles,echo=showcode}
+```{r reimportBPMfiles,echo=showcode, cache=TRUE}
 # Import the algorithm-processed heart rate estimates for all of the 
 # functional sensors and load them into data frames
 
@@ -1775,7 +1767,7 @@ write.csv(Heartbpm, file = paste0(localpath,outputheartratedir,mySN,'_bpm_QA.csv
 
 # Output plots Trial 1
 
-```{r openQAdHeartRate,echo=showcode}
+```{r openQAdHeartRate,echo=showcode, cache=TRUE}
 #Trial 1 consisted of these mussels: 
 # Controls, Trial 1:  SN173, SN196, SN224
 # Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
@@ -1813,7 +1805,7 @@ for (i in 1:length(myBPMs)){
 
 ```
 
-```{r testPlotTrial1,echo=showcode}
+```{r testPlotTrial1,echo=showcode, cache=TRUE}
 # Controls, Trial 1:  SN173, SN196, SN224
 # Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
 
@@ -1897,7 +1889,7 @@ abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
 
 
 
-```{r comboTrial1Plot, echo=showcode, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
+```{r comboTrial1Plot, echo=showcode, cache=TRUE, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
 
 
 #Panel the graphs
@@ -2048,7 +2040,7 @@ mtext(side = 3, text = 'Low Salinity, SN218', line = -1.5, cex = 0.8)
 
 
 
-```{r comboTrial1ControlPlot, echo=showcode, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
+```{r comboTrial1ControlPlot, echo=showcode, cache=TRUE, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
 # Controls, Trial 1:  SN173, SN196, SN224
 
 
@@ -2200,7 +2192,7 @@ abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
 ######################
 ```
 
-```{r comboTrial1LowSalinityPlot, echo=showcode, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
+```{r comboTrial1LowSalinityPlot, echo=showcode, cache=TRUE, dev = 'png',fig.width=12,fig.height=8,dpi=300,fig.cap='Trial 1'}
 # Low salinity Trial 1: SN189, SN218, SN179  (SN103 no data)
 
 
@@ -2357,7 +2349,9 @@ abline(v = c(declineStart, declineFinish,riseStart,riseFinish))
 ```
 
 
-```{r bigGapeHeartSalinityPlot,echo=showcode, dev = 'png', fig.width=8,fig.height = 16, dpi = 300}
+## WSN 2023 poster figure
+
+```{r bigGapeHeartSalinityPlot,echo=showcode, dev = 'png', fig.width=14,fig.height = 20, dpi = 300}
 # Show all on one plot
 
 # Controls, Trial 1:  SN173, SN196, SN224 
@@ -2373,11 +2367,14 @@ riseStart = as.POSIXct('2023-08-29 11:40',tz='PST8PDT')
 riseFinish= as.POSIXct('2023-08-29 15:10',tz='PST8PDT')
 
 
+#layout(matrix(c(1,2,3,4,5,6,7), nrow = 7, ncol = 1),
+#		heights = lcm(c(4.5,4.5,6,4.5,6,4.5,4.5)),respect=TRUE)
 layout(matrix(c(1,2,3,4,5,6,7), nrow = 7, ncol = 1),
-		heights = lcm(c(4.5,4.5,6,4.5,6,4.5,4.5)),respect=TRUE)
+		heights = lcm(c(6.5,6.5,7,6.5,7.5,6.5,6.5)),respect=TRUE)
 par(mar = c(0,6.5,0,1))
 mylwd = 2
 mycex = 1.25
+mycexaxis = 1.5
 mygray = 'grey80'
 #mygrayblue = rgb(0.82,0.82,0.9)
 mygrayblue = 'steelblue1'  # for control plots
@@ -2385,8 +2382,8 @@ mygrayblue = 'steelblue1'  # for control plots
 mygraygreen = 'darkseagreen2'  # For low salinity plots
 gapecolor = 'gray30'
 
-mycexlab = 1.7
-mycexlab2 = 1.2
+mycexlab = 1.9
+mycexlab2 = 1.4
 ylabline = 7
 myBPMylims = c(0,34)
 myadj = 0.61
@@ -2426,7 +2423,7 @@ axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, ce
 mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = mycexlab2, col = gapecolor)
 #legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
 #		lty= c(1,1))
-mtext(side = 3, text = 'Control 38PSU, SN173', line = -1.5, cex = 0.8, adj = myadj)
+mtext(side = 3, text = 'Control 38PSU, SN173', line = -1.5, cex = 1, adj = myadj)
 abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 
 #par(oldpar) 
@@ -2458,7 +2455,7 @@ mtext(side = 4, line = 2.5, text = 'Gape, mm', cex =  mycexlab2, col = gapecolor
 #legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
 #		lty= c(1,1))
 
-mtext(side = 3, text = 'Control 38PSU, SN196', line = -1.5, cex = 0.8, adj = myadj)
+mtext(side = 3, text = 'Control 38PSU, SN196', line = -1.5, cex = 1, adj = myadj)
 abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 ###########################################
 
@@ -2469,7 +2466,8 @@ par(mar = c(4,6,0.5,4)) # Larger bottom margin
 plot(SN224bpmQA$DateTime, SN224bpmQA$finalBPM, type = 'l', col = 4,
 		ylim = myBPMylims , las = 1,
 		ylab = '', yaxt = 'n',
-		 xlab = '')
+		 xlab = '', 
+		 cex.axis = mycexaxis)
 rect(xleft = par()$usr[1],ybottom=par()$usr[3],
 		xright=par()$usr[2],ytop=par()$usr[4],
 		col = mygrayblue)
@@ -2488,7 +2486,7 @@ mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = mycexlab2, col = gapecolor)
 #lines(SN224gape$DateTime, SN224gape$gape.mm, type = 'l', col =4)
 #legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
 #		lty= c(1,1))
-mtext(side = 3, text = 'Control 38PSU, SN224', line = -1.5, cex = 0.8, adj = myadj)
+mtext(side = 3, text = 'Control 38PSU, SN224', line = -1.5, cex = 1, adj = myadj)
 
 abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 
@@ -2502,7 +2500,8 @@ tr1 = droplevels(tr1)
 
 plot(tr1$DateTime, y = tr1$Salinity_psu, type='n',
 		ylab = 'Salinity, psu', las = 1, 
-		xlab = 'Time', xaxt = 'n', 
+		xlab = 'Time', 
+		xaxt = 'n', 
 		cex.lab = mycexlab,
 		cex.axis = mycexlab2)
 rect(xleft = par()$usr[1],ybottom=par()$usr[3],
@@ -2552,7 +2551,7 @@ axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, ce
 mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = mycexlab2, col = gapecolor)
 #legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
 #		lty= c(1,1))
-mtext(side = 3, text = 'Low Salinity, SN189', line = -1.5, cex = 0.8, adj = myadj)
+mtext(side = 3, text = 'Low Salinity, SN189', line = -1.5, cex = 1, adj = myadj)
 abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 
 #par(oldpar) 
@@ -2586,7 +2585,7 @@ mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = mycexlab2, col = gapecolor)
 #legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
 #		lty= c(1,1))
 
-mtext(side = 3, text = 'Low Salinity, SN218', line = -1.5, cex = 0.8, adj = myadj)
+mtext(side = 3, text = 'Low Salinity, SN218', line = -1.5, cex = 1, adj = myadj)
 abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 ###########################################
 
@@ -2596,7 +2595,8 @@ par(mar = c(1,6,0.5,4)) # Margin for the bottom plot, leave space for x-axis lab
 
 plot(SN179bpmQA$DateTime, SN179bpmQA$finalBPM, type = 'l', col = 4,
 		ylim = myBPMylims , las = 1,
-		ylab = '', yaxt = 'n')
+		ylab = '', yaxt = 'n', 
+		cex.axis = mycexaxis)
 rect(xleft = par()$usr[1],ybottom=par()$usr[3],
 		xright=par()$usr[2],ytop=par()$usr[4],
 		col = mygraygreen)
@@ -2615,7 +2615,7 @@ mtext(side = 4, line = 2.5, text = 'Gape, mm', cex = mycexlab2, col = gapecolor)
 #lines(SN179gape$DateTime, SN179gape$gape.mm, type = 'l', col =4)
 #legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
 #		lty= c(1,1))
-mtext(side = 3, text = 'Low Salinity, SN179', line = -1.5, cex = 0.8, adj = myadj)
+mtext(side = 3, text = 'Low Salinity, SN179', line = -1.5, cex = 1, adj = myadj)
 
 abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 
@@ -2623,6 +2623,286 @@ abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
 
 ```
 
+
+
+## Powerpoint version
+
+```{r bigGapeHeartSalinityPlotPP,echo=showcode, dev = 'png', fig.width=14,fig.height = 20, dpi = 300}
+# Show all on one plot
+
+# Controls, Trial 1:  SN173, SN196, SN224 
+
+
+#Panel the graphs
+#layout(matrix(c(1,2,3,4,5,6,7), nrow = 7, ncol = 1),
+#		heights = lcm(c(2.5,2.5,2.5,2.5,2.5,3.25,3.5)),respect=TRUE)
+
+declineStart = as.POSIXct('2023-08-28 14:20',tz='PST8PDT')
+declineFinish = as.POSIXct('2023-08-28 22:30',tz='PST8PDT')
+riseStart = as.POSIXct('2023-08-29 11:40',tz='PST8PDT')
+riseFinish= as.POSIXct('2023-08-29 15:10',tz='PST8PDT')
+
+
+#layout(matrix(c(1,2,3,4,5,6,7), nrow = 7, ncol = 1),
+#		heights = lcm(c(4.5,4.5,6,4.5,6,4.5,4.5)),respect=TRUE)
+layout(matrix(c(1,2,3,4,5,6,7), nrow = 7, ncol = 1),
+		heights = lcm(c(6.5,6.5,7,6.5,7.5,6.5,6.5)),respect=TRUE)
+par(mar = c(0,6.5,0,1))
+mylwd = 2
+mycex = 1.75   # 1.25 for poster version
+mycexaxis = 2.2  # (time values on x-axis) 1.5 for poster version
+mygray = 'grey80'
+#mygrayblue = rgb(0.82,0.82,0.9)
+mygrayblue = 'steelblue1'  # for control plots
+#mygraygreen = rgb(0.8,0.85,0.8)  # For low salinity plots
+mygraygreen = 'darkseagreen2'  # For low salinity plots
+gapecolor = 'gray30'
+
+mycexlab = 2.2   # 1.9 for poster version
+mycexlab2 = 2.2  # font size for y-axis numbers, 1.4 for poster version
+mycexYlabel = 1.9 # font size for y-axis text titles
+ylabline = 7 
+leftylabline = 4 # alignment for left y-axis text title
+rightylabline = 4 # alignment for 2nd y-axis text title
+myBPMylims = c(0,34)
+myadj = 0.61   # 0.61 for poster version
+
+#vgrids = as.POSIXct(c('2020-12-29 00:00',
+#				'2020-12-30 00:00', '2020-12-31 00:00'), tz = 'etc/GMT+8')
+mytimestart = as.POSIXct('2023-08-28 09:00', tz = 'PST8PDT')
+mytimeend = as.POSIXct('2023-08-29 15:10', tz = 'PST8PDT')
+
+
+#plot.new()
+par(mar = c(0.5,6,0.5,5)) # Margins for all plots except the bottom plot
+
+####################################
+# Plot the QA'd heart rate data and gape data for SN173 in Trial 1 (Control)
+# Generally had good well-defined heart signal with high amplitude, although
+# there were some sections that seemed arhythmic and had to be scored NA
+plot(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, type = 'l', 
+		ylim = myBPMylims , las = 1, 
+		xaxt = 'n',
+		ylab = '', axes = FALSE)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2, cex.axis = mycexlab2)
+mtext(text='Heart rate, bpm', side = 2, line = leftylabline, col = 2, cex = mycexYlabel)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygrayblue)
+#abline(h = 0)
+SN173bpmQA$finalBPM[which(SN173bpmQA$finalBPM == 0)] <- NA
+lines(SN173bpmQA$DateTime, SN173bpmQA$finalBPM, col = 2, lwd = mylwd)
+
+oldpar <- par()
+par(new=TRUE)  # Plot the gape data on the same plot, new y-axis
+#lines(SN173gape$DateTime, SN173gape$gape.mm, type = 'l', col = 4)
+plot(SN173gape$DateTime, SN173gape$gape.mm, type = 'l', col = gapecolor,
+		axes = FALSE, ylim = c(0,8), ylab = '', lwd = mylwd)
+axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, cex.axis = mycexlab2)
+mtext(side = 4, line = rightylabline, text = 'Gape, mm', cex = mycexYlabel, col = gapecolor)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+mtext(side = 3, text = 'Control 38PSU, SN173', line = -1.5, cex = 1, adj = myadj)
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+
+#par(oldpar) 
+
+###################################
+###################################
+# SN196 Control
+plot(SN196bpmQA$DateTime, SN196bpmQA$finalBPM, type = 'l', col = 2,
+		ylim = myBPMylims , las = 1,
+		ylab = '', axes = FALSE,
+		xaxt = 'n')
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygrayblue)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2, cex.axis = mycexlab2)
+mtext(text='Heart rate, bpm', side = 2, line = leftylabline, col = 2, cex = mycexYlabel)
+#abline(h = 0)
+SN196bpmQA$finalBPM[which(SN196bpmQA$finalBPM == 0)] <- NA
+lines(SN196bpmQA$DateTime, SN196bpmQA$finalBPM, col = 2, lwd = mylwd)
+
+par(new=TRUE)
+#lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =4)
+plot(SN196gape$DateTime, SN196gape$gape.mm, type = 'l', col =gapecolor,
+		axes = FALSE, ylim = c(0,8), ylab = '', lwd = mylwd)
+axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, cex.axis = mycexlab2)
+mtext(side = 4, line = rightylabline, text = 'Gape, mm', cex =  mycexYlabel, col = gapecolor)
+
+#lines(SN196gape$DateTime, SN196gape$gape.mm, type = 'l', col =4)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+
+mtext(side = 3, text = 'Control 38PSU, SN196', line = -1.5, cex = 1, adj = myadj)
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+###########################################
+
+
+par(mar = c(4,6,0.5,5)) # Larger bottom margin
+##################################
+# SN224 Control
+plot(SN224bpmQA$DateTime, SN224bpmQA$finalBPM, type = 'l', col = 4,
+		ylim = myBPMylims , las = 1,
+		ylab = '', yaxt = 'n',
+		 xlab = '', 
+		 cex.axis = mycexaxis)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygrayblue)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2, cex.axis = mycexlab2)
+mtext(text='Heart rate, bpm', side = 2, line = leftylabline, col = 2, cex = mycexYlabel)
+#abline(h = 0)
+SN224bpmQA$finalBPM[which(SN224bpmQA$finalBPM == 0)] <- NA
+lines(SN224bpmQA$DateTime, SN224bpmQA$finalBPM, col = 2, lwd = mylwd)
+
+par(new=TRUE)
+# Plot the gape data using a 2nd y-axis
+plot(SN224gape$DateTime, SN224gape$gape.mm, type = 'l', col =gapecolor,
+		axes = FALSE, ylim = c(0,8), ylab = '', xlab = '', lwd = mylwd)
+axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, cex.axis = mycexlab2)
+mtext(side = 4, line = rightylabline, text = 'Gape, mm', cex = mycexYlabel, col = gapecolor)
+#lines(SN224gape$DateTime, SN224gape$gape.mm, type = 'l', col =4)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+mtext(side = 3, text = 'Control 38PSU, SN224', line = -1.5, cex = 1, adj = myadj)
+
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+
+
+############################################################################
+# Now plot the salinity data in the middle panel
+par(mar = c(0,6,1.5,5)) # Margins for all plots except the bottom plot
+############################################################################
+tr1 = waterdata[which(waterdata$TrialNumber == '1'),]
+tr1 = droplevels(tr1)
+
+plot(tr1$DateTime, y = tr1$Salinity_psu, type='n',
+		ylab = '', las = 1, 
+		xlab = 'Time', 
+		xaxt = 'n', 
+		cex.lab = mycexlab,
+		cex.axis = mycexlab2)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygray)
+for (i in 1:length(levels(tr1$SerialNumber))){
+	thisSN = levels(tr1$SerialNumber)[i]
+	dat = tr1[which(tr1$SerialNumber == thisSN),]
+	
+	if(dat$SalinityTreatment[1] == '3psu') {
+		mycol = 3
+	} else if (dat$SalinityTreatment[1] == 'control') {
+		mycol = 'royalblue'
+	}
+	
+	lines(dat$DateTime, dat$Salinity_psu, col = mycol, lwd = mylwd)
+}
+legend('bottomleft', legend = c('Control','Low salinity'), col = c(4,3),
+		lty = c(1,1), bty = 'n', lwd = 4, cex = mycexlab)
+mtext(side = 2, text = 'Salinity, psu', line = leftylabline, col = 1, cex = mycexYlabel)
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+
+##############################################
+# Now plot the low-salinity mussels
+##############################################
+
+par(mar = c(0.5,6,5,5)) # Margins for all plots except the bottom plot
+
+# Plot the low-salinity mussels
+plot(SN189bpmQA$DateTime, SN189bpmQA$finalBPM, type = 'l', 
+		ylim = myBPMylims , las = 1, 
+		xaxt = 'n',
+		ylab = '', axes = FALSE)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2, cex.axis = mycexlab2)
+mtext(text='Heart rate, bpm', side = 2, line = leftylabline, col = 2, cex = mycexYlabel)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygraygreen)
+#abline(h = 0)
+SN189bpmQA$finalBPM[which(SN189bpmQA$finalBPM == 0)] <- NA
+lines(SN189bpmQA$DateTime, SN189bpmQA$finalBPM, col = 2, lwd = mylwd)
+
+oldpar <- par()
+par(new=TRUE)
+#lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col = 4)
+plot(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col = gapecolor,
+		axes = FALSE, ylim = c(0,8), ylab = '', lwd = mylwd)
+axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, cex.axis = mycexlab2)
+mtext(side = 4, line = rightylabline, text = 'Gape, mm', cex = mycexYlabel, col = gapecolor)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+mtext(side = 3, text = 'Low Salinity, SN189', line = -1.5, cex = 1, adj = myadj)
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+
+#par(oldpar) 
+
+###################################
+par(mar = c(0.5,6,0.5,5)) # Margins for all plots except the bottom plot
+###################################
+plot(SN218bpmQA$DateTime, SN218bpmQA$finalBPM, type = 'l', col = 2,
+		ylim = myBPMylims , las = 1,
+		ylab = '', axes = FALSE,
+		xaxt = 'n')
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygraygreen)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2, cex.axis = mycexlab2)
+mtext(text='Heart rate, bpm', side = 2, line = leftylabline, col = 2, cex = mycexYlabel)
+#abline(h = 0)
+# Censor 0 bpm values
+SN218bpmQA$finalBPM[which(SN218bpmQA$finalBPM == 0)] <- NA
+lines(SN218bpmQA$DateTime, SN218bpmQA$finalBPM, col = 2, lwd = mylwd)
+
+par(new=TRUE)
+#lines(SN189gape$DateTime, SN189gape$gape.mm, type = 'l', col =4)
+
+
+plot(SN218gape$DateTime, SN218gape$gape.mm, type = 'l', col =gapecolor,
+		axes = FALSE, ylim = c(0,8), ylab = '', lwd = mylwd)
+axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, cex.axis = mycexlab2)
+mtext(side = 4, line = rightylabline, text = 'Gape, mm', cex = mycexYlabel, col = gapecolor)
+
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+
+mtext(side = 3, text = 'Low Salinity, SN218', line = -1.5, cex = 1, adj = myadj)
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+###########################################
+
+par(mar = c(1,6,0.5,5)) # Margin for the bottom plot, leave space for x-axis labels
+
+##################################
+
+plot(SN179bpmQA$DateTime, SN179bpmQA$finalBPM, type = 'l', col = 4,
+		ylim = myBPMylims , las = 1,
+		ylab = '', yaxt = 'n', 
+		cex.axis = mycexaxis)
+rect(xleft = par()$usr[1],ybottom=par()$usr[3],
+		xright=par()$usr[2],ytop=par()$usr[4],
+		col = mygraygreen)
+axis(side=2, ylim = myBPMylims, col = 2, las = 1, col.axis=2, cex.axis = mycexlab2)
+mtext(text='Heart rate, bpm', side = 2, line = leftylabline, col = 2, cex = mycexYlabel)
+#abline(h = 0)
+SN179bpmQA$finalBPM[which(SN179bpmQA$finalBPM == 0)] <- NA
+lines(SN179bpmQA$DateTime, SN179bpmQA$finalBPM, col = 2, lwd = mylwd)
+
+par(new=TRUE)
+# Plot the gape data using a 2nd y-axis
+plot(SN179gape$DateTime, SN179gape$gape.mm, type = 'l', col =gapecolor,
+		axes = FALSE, ylim = c(0,8), ylab = '', lwd = mylwd)
+axis(side = 4, ylim =c(0,10), col = gapecolor, las = 1, col.axis = gapecolor, cex.axis = mycexlab2)
+mtext(side = 4, line = rightylabline, text = 'Gape, mm', cex = mycexYlabel, col = gapecolor)
+#lines(SN179gape$DateTime, SN179gape$gape.mm, type = 'l', col =4)
+#legend('topleft',legend=c('Heart rate','Gape, mm'), col = c(2,4),
+#		lty= c(1,1))
+mtext(side = 3, text = 'Low Salinity, SN179', line = -1.5, cex = 1, adj = myadj)
+
+abline(v = c(declineStart, declineFinish,riseStart), lty = 3)
+
+
+
+```
 
 
 ## Example field salinity data
@@ -2702,10 +2982,92 @@ plot(x = temp$DateTimePST, y = temp$sal, type = 'l', las = 1,
 rect(xleft = par()$usr[1],ybottom=par()$usr[3],
 		xright=par()$usr[2],ytop=par()$usr[4],
 		col = mygray)
-abline(v = myseq, lty = 3, col = 'white')
+#abline(v = myseq, lty = 3, col = 'white')
 mtext(side = 3, text = 'Los Penasquitos Lagoon surface water, Dec 26-27 2019')
 lines(x = temp$DateTimePST, y = temp$sal, lwd = 2)
 myseq = seq(from = myd1, by = 3600, length.out = 32)
 
 ```
 
+```{r averageRates,echo=showcode}
+
+hourbefore = as.POSIXct('2023-08-28 13:20', tz='PST8PDT')
+declineStart = as.POSIXct('2023-08-28 14:20',tz='PST8PDT')
+declineFinish = as.POSIXct('2023-08-28 22:30',tz='PST8PDT')
+riseStart = as.POSIXct('2023-08-29 11:40',tz='PST8PDT')
+riseFinish= as.POSIXct('2023-08-29 15:10',tz='PST8PDT')
+midstart = as.POSIXct('2023-08-29 4:40', tz = 'PST8PDT')
+midend = as.POSIXct('2023-08-29 5:40', tz = 'PST8PDT')
+lasthour = as.POSIXct('2023-08-29 14:10', tz='PST8PDT')
+
+# Compare average gape in the hour before the start of the decline
+
+controls = c('SN173', 'SN196','SN224')
+lowsal = c('SN189','SN218','SN179')
+
+
+summaryfunc = function(ID = 'SN173', bpmData, gapeData, Phase = NULL, Treatment = NULL, startTime,endTime){
+	meanbpm = mean(bpmData[bpmData$DateTime > startTime & 
+							bpmData$DateTime < endTime, 'finalBPM'], na.rm = TRUE)
+	meangape = mean(gapeData[gapeData$DateTime > startTime & 
+							gapeData$DateTime < endTime, 'gape.mm'], na.rm = TRUE)
+	tempdf = data.frame(ID = ID, Treatment = Treatment, Phase = Phase, AvgBPM = meanbpm, 
+			AvgGape = meangape)
+	tempdf
+}
+
+# Control mussels
+res = summaryfunc(ID = 'SN173', SN173bpmQA, SN173gape, Phase = 'start', 'Control', hourbefore, declineStart)
+res2 = summaryfunc(ID = 'SN173', SN173bpmQA, SN173gape, Phase = 'middle','Control',  midstart, midend)
+res3 = summaryfunc(ID = 'SN173', SN173bpmQA, SN173gape, Phase = 'end','Control',  lasthour, riseFinish)
+responsesummary = rbind(res,res2,res3)
+
+
+res = summaryfunc(ID = 'SN196', SN196bpmQA, SN196gape, Phase = 'start','Control',  hourbefore, declineStart)
+res2 = summaryfunc(ID = 'SN196', SN196bpmQA, SN196gape, Phase = 'middle', 'Control', midstart, midend)
+res3 = summaryfunc(ID = 'SN196', SN196bpmQA, SN196gape, Phase = 'end','Control',  lasthour, riseFinish)
+responsesummary = rbind(responsesummary, res,res2,res3)
+
+res = summaryfunc(ID = 'SN224', SN224bpmQA, SN224gape, Phase = 'start','Control',  hourbefore, declineStart)
+res2 = summaryfunc(ID = 'SN224', SN224bpmQA, SN224gape, Phase = 'middle', 'Control', midstart, midend)
+res3 = summaryfunc(ID = 'SN224', SN224bpmQA, SN224gape, Phase = 'end','Control',  lasthour, riseFinish)
+responsesummary = rbind(responsesummary, res,res2,res3)
+
+# Low salinity mussels
+res = summaryfunc(ID = 'SN189', SN189bpmQA, SN189gape, Phase = 'start', 'Low Salinity', hourbefore, declineStart)
+res2 = summaryfunc(ID = 'SN189', SN189bpmQA, SN189gape, Phase = 'middle','Low Salinity',  midstart, midend)
+res3 = summaryfunc(ID = 'SN189', SN189bpmQA, SN189gape, Phase = 'end','Low Salinity',  lasthour, riseFinish)
+responsesummary = rbind(responsesummary, res,res2,res3)
+
+res = summaryfunc(ID = 'SN218', SN218bpmQA, SN218gape, Phase = 'start','Low Salinity',  hourbefore, declineStart)
+res2 = summaryfunc(ID = 'SN218', SN218bpmQA, SN218gape, Phase = 'middle', 'Low Salinity', midstart, midend)
+res3 = summaryfunc(ID = 'SN218', SN218bpmQA, SN218gape, Phase = 'end','Low Salinity',  lasthour, riseFinish)
+responsesummary = rbind(responsesummary, res,res2,res3)
+
+res = summaryfunc(ID = 'SN179', SN179bpmQA, SN179gape, Phase = 'start','Low Salinity',  hourbefore, declineStart)
+res2 = summaryfunc(ID = 'SN179', SN179bpmQA, SN179gape, Phase = 'middle', 'Low Salinity', midstart, midend)
+res3 = summaryfunc(ID = 'SN179', SN179bpmQA, SN179gape, Phase = 'end','Low Salinity',  lasthour, riseFinish)
+responsesummary = rbind(responsesummary, res,res2,res3)
+
+responsesummary$Treatment = factor(responsesummary$Treatment)
+responsesummary$Phase = factor(responsesummary$Phase, levels = c('start','middle','end'))
+responsesummary$ID = factor(responsesummary$ID)
+
+```
+
+
+```{r heartresponsePlot, echo=showcode}
+library(ggplot2)
+library(reshape2)
+
+ggplot(responsesummary, aes(x = Phase, y = AvgBPM)) +
+		geom_point(aes(color = Treatment), shape = 20, size = 4, position = position_dodge(width = 0.4)) +
+		theme_bw()
+```
+
+
+```{r gapeResponsePlot, echo=showcode}
+ggplot(responsesummary, aes(x = Phase, y = AvgGape)) +
+		geom_point(aes(color = Treatment), shape = 20, size = 4, position = position_dodge(width = 0.4)) +
+		theme_bw()
+```
