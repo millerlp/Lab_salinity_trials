@@ -1226,15 +1226,21 @@ getBPM = function(x,t1 = 1, sensor = 'IR',chunklength=400,
 				finalBPM = NA,
 				finalfilter = 1/highband,
 				QA = FALSE)
-		# If there is reasonable agreement between the 3 beats per minute estimates,
-		# record the mean of the 3 values as the finalBPM
-		if (resultsList$BPMagreeQuality.fft.forecast <= BPMqualityThreshold & 
-				resultsList$BPMagreeQuality.prac.forecast <= BPMqualityThreshold &
-				resultsList$BPMagreeQuality.prac.fft <= BPMqualityThreshold & 
-				resultsList$WeakSignalFlag == 'OK') {
-			resultsList$finalBPM = round(mean(resultsList$BPMfft,
-							resultsList$BPMforecast,
-							resultsList$BPMpeaks), digits = 1)
+		# If the slowest heart rate is at least above 4bpm, check and see if there's
+		# agreement among the 3 estimates. These algorithms really don't deal well
+		# with really slow heart rates, so those slowest values should not be
+		# automatically recorded (they should be looked at by a human and confirmed)
+		if (min(c(resultsList$BPMpeaks,resultsList$BPMfft,resultsList$BPMforecast)) >= 4){
+			# If there is reasonable agreement between the 3 beats per minute estimates,
+			# record the mean of the 3 values as the finalBPM
+			if (resultsList$BPMagreeQuality.fft.forecast <= BPMqualityThreshold & 
+					resultsList$BPMagreeQuality.prac.forecast <= BPMqualityThreshold &
+					resultsList$BPMagreeQuality.prac.fft <= BPMqualityThreshold & 
+					resultsList$WeakSignalFlag == 'OK') {
+				resultsList$finalBPM = round(mean(
+								c(resultsList$BPMfft,resultsList$BPMforecast,resultsList$BPMpeaks)),  #fixed mean calc 2024-09-25
+						digits = 1)
+			}
 		}
 	} else if (length( which( is.na(temp[,sensor]) ) ) > 0 | (var(detrendedIR) == 0)) {
 		# Handle the case where there are NAs in the data chunk that prevent
@@ -1407,6 +1413,8 @@ length(which(is.na(SN243bpm$finalBPM)))
 length(which(is.na(SN198bpm$finalBPM)))
 
 ```
+
+## Manual Heart Inspection
 
 ```{r interactivePlotFunctions}
 ####################################################################################
